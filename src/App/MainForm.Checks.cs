@@ -218,6 +218,7 @@ namespace BF2Coop
                 if (!c.NeedsFix) continue;
                 if (c.Id == "profile") { FixProfile(); continue; }
                 if (c.Id == "game") { ChooseGameDir(); continue; }
+                if (c.Id == "arm") { FixArm(); continue; }
                 if (c.Url != null) { if (only != null) try { Process.Start(c.Url); } catch { } continue; }
                 tasks.AddRange(c.Tasks);
             }
@@ -231,6 +232,21 @@ namespace BF2Coop
                 Toast(ok ? T("Behoben.", "Fixed.") : (log.Length > 0 ? log : T("Nicht alles konnte behoben werden.", "Not everything could be fixed.")), ok ? ToastKind.Ok : ToastKind.Warn);
                 RefreshStatus(); RefreshChecks(true);
             });
+        }
+
+        // Windows on ARM: Emulationsschalter (HKCU, für diesen Benutzer) und CPU-Patch – ohne Adminrechte
+        void FixArm()
+        {
+            if (Srv.GameRunning() || _running) { Toast(T("Bitte zuerst Battlefield 2 und den Server beenden.", "Please close Battlefield 2 and stop the server first."), ToastKind.Warn); return; }
+            try
+            {
+                List<string> log = ArmSupport.Apply(GameDir);
+                Util.Log(AppPaths.Dir, "Windows on ARM setup: " + string.Join("; ", log.ToArray()));
+                Toast(T("Für Windows on ARM eingerichtet.", "Set up for Windows on ARM."), ToastKind.Ok);
+            }
+            catch (UnauthorizedAccessException) { Toast(T("Keine Schreibrechte im Spielordner – zuerst „Schreibrechte vergeben“.", "No write access to the game folder – use “Grant write access” first."), ToastKind.Error); }
+            catch (Exception ex) { Toast(ex.Message, ToastKind.Error); }
+            RefreshChecks(true);
         }
 
         // Profil fehlt oder heißt noch „defaultPlayer“: auf der Seite Spielen direkt den Namen abfragen

@@ -61,6 +61,8 @@ Windows 10/11 (.NET Framework 4.5+ is part of Windows) and Battlefield 2 with pa
 **Join stops at the login screen.** *Settings › Game start › Log in automatically* must be on and an offline profile selected.
 **Game freezes when joining.** *Play › Profile › Repair profile*; switch ReShade off if installed; check on the server PC that the server is still running.
 **No unlock weapons.** Host: *Options › Server behaviour › all unlocks*. Every player: *Fix* (client unlock).
+**Mac with Parallels / Windows on ARM.** BF2 runs, but needs two adjustments for the x86 emulation. *Settings › This PC › Windows on ARM › Set up* applies both (see the [user guide](docs/USER-GUIDE.md#windows-on-arm-mac-with-parallels)).
+**Fewer or more bots than set.** The game never uses more than 32 bots. If a mod forces its own bots (`overrideMenuSettings 1` in `ai\aiDefault.ai`), the manager offers to fix it when the server starts.
 
 ## Deutsch
 

@@ -33,7 +33,7 @@ namespace BF2Coop
         public string Id, Title, Detail, FixLabel, Url;
         public CheckStatus Status;
         public List<Dictionary<string, object>> Tasks = new List<Dictionary<string, object>>();
-        public bool CanFix { get { return Tasks.Count > 0 || Url != null || Id == "profile" || Id == "game"; } }
+        public bool CanFix { get { return Tasks.Count > 0 || Url != null || Id == "profile" || Id == "game" || Id == "arm"; } }
         public bool NeedsFix { get { return Status == CheckStatus.Warn || Status == CheckStatus.Error; } }
     }
 
@@ -106,6 +106,18 @@ namespace BF2Coop
                 }
             }
             else { dx.Status = CheckStatus.Info; dx.Detail = T("Nur Server installiert (kein BF2.exe).", "Server only (no BF2.exe)."); }
+
+            // Windows on ARM (z. B. Mac mit Parallels): ohne Emulationsschalter und CPU-Patch stürzen Spiel und Server ab
+            if (ArmSupport.IsArmPc())
+            {
+                CheckItem arm = New(r, "arm", T("Windows on ARM", "Windows on ARM"));
+                List<string> miss = ArmSupport.Missing(gameDir);
+                arm.Status = miss.Count == 0 ? CheckStatus.Ok : CheckStatus.Warn;
+                arm.Detail = miss.Count == 0
+                    ? T("Spiel und Server sind für die x86-Emulation eingerichtet.", "Game and server are set up for x86 emulation.")
+                    : T("Dieser PC hat einen ARM-Prozessor (z. B. Mac mit Parallels). Ohne Anpassung stürzt BF2 beim Start oder nach dem Intro ab und der Server endet nach kurzer Zeit. Fehlt: ", "This PC has an ARM processor (e.g. a Mac with Parallels). Without these settings BF2 crashes at start or after the intro and the server stops after a short time. Missing: ") + string.Join(", ", miss.ToArray());
+                if (miss.Count > 0) arm.FixLabel = T("Einrichten", "Set up");
+            }
 
             CheckItem fw = New(r, "firewall", T("Firewall", "Firewall"));
             List<string> progs = new List<string>();

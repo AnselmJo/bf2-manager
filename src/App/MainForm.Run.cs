@@ -52,9 +52,11 @@ namespace BF2Coop
             try { foreach (string f in new string[] { "coop_cmd.txt", "coop_live.txt" }) { string p = Path.Combine(ModSettingsDir, f); if (File.Exists(p)) File.Delete(p); } } catch { }
             try
             {
-                ProcessStartInfo psi = new ProcessStartInfo(exe, Srv.Args(_mod, _coop));
+                ProcessStartInfo psi = new ProcessStartInfo(exe, Srv.Args(_mod, _coop, CfgDir));
                 psi.WorkingDirectory = GameDir; psi.UseShellExecute = false;
-                Run(psi);
+                Process p = Process.Start(psi);
+                if (_srvProc != null) _srvProc.Dispose();
+                _srvProc = p; _srvExit = null;
                 _srvStart = DateTime.Now; _userStopped = false; _moduleSeen = false; _hung = false;
                 _startVals = new Dictionary<string, string>(_vals, StringComparer.OrdinalIgnoreCase); _sentVals.Clear(); _rotSig = RotationSig();
                 Toast(T("Server startet …", "Server starting …"), ToastKind.Ok);
@@ -185,20 +187,44 @@ namespace BF2Coop
             string map; live.TryGetValue("map", out map);
             _tiles[0].Set(st == SrvState.Running || st == SrvState.NoModule ? "Online" : (st == SrvState.Starting ? T("Startet", "Starting") : "Offline"),
                 st == SrvState.Running ? T("Bot-Modul aktiv", "bot module active") : (st == SrvState.NoModule ? T("Bot-Modul meldet sich nicht", "bot module not responding") : (run ? T("wird geladen", "loading") : "")), _pill.DotColor);
-            _tiles[1].Set(_module && !string.IsNullOrEmpty(map) ? Util.Pretty(map) : "–", _module ? T("aktuelle Map", "current map") : "", Theme.Accent);
-            string hu, hm, bu, bm;
+            string hu, hm, bu, bm, bw, mapSub = _module ? T("aktuelle Map", "current map") : "";
             if (_module && live.TryGetValue("humansUS", out hu) && live.TryGetValue("humansMEC", out hm) && live.TryGetValue("botsUS", out bu) && live.TryGetValue("botsMEC", out bm))
             {
                 _tiles[2].Set((Util.ToInt(hu, 0) + Util.ToInt(bu, 0)).ToString(), hu + T(" Menschen · ", " humans · ") + bu + " Bots", Theme.Us);
                 _tiles[3].Set((Util.ToInt(hm, 0) + Util.ToInt(bm, 0)).ToString(), hm + T(" Menschen · ", " humans · ") + bm + " Bots", Theme.Mec);
+                int want = live.TryGetValue("botsWanted", out bw) ? Util.ToInt(bw, -1) : -1;
+                if (want >= 0)
+                {
+                    int have = Util.ToInt(bu, 0) + Util.ToInt(bm, 0);
+                    want = Math.Min(want, Planner.EngineMaxBots);
+                    mapSub += " · Bots " + have + "/" + want;
+                    CheckBotMismatch(map, have, want);
+                }
             }
             else { _tiles[2].Set("–", "", Theme.Us); _tiles[3].Set("–", "", Theme.Mec); }
+            _tiles[1].Set(_module && !string.IsNullOrEmpty(map) ? Util.Pretty(map) : "–", mapSub, Theme.Accent);
             if (_running) { UpdatePlayers(players); RefreshUpcoming(); }
             if (_mod.Length > 0)
             {
                 string[] lines = _tail.ReadIfChanged(Path.Combine(ModSettingsDir, "coop_status.txt"), 250);
                 if (lines != null) { SetLog(lines); CheckResults(lines); }
             }
+        }
+
+        // Spielen deutlich mehr oder weniger Bots als eingestellt? Nach ~20 s (Bots erscheinen nach und nach) einmal pro Map erklären.
+        int _botMismatch; string _botWarnMap;
+        void CheckBotMismatch(string map, int have, int want)
+        {
+            if (Math.Abs(have - want) <= 1) { _botMismatch = 0; return; }
+            if (++_botMismatch < 4 || _botWarnMap == map) return;
+            _botWarnMap = map;
+            string msg = T("Es spielen ", "There are ") + have + T(" Bots statt ", " bots instead of ") + want + ". ";
+            if (AiFile.Load(GameDir, _mod).OverridesManager)
+                msg += T("Der Mod gibt die Bots in aiDefault.ai fest vor – beim nächsten Serverstart bietet der Manager an, das zu beheben.", "The mod forces its own bots in aiDefault.ai – at the next server start the manager offers to fix it.");
+            else
+                msg += T("Möglicherweise lädt die Map nicht für alle Bots Wegpunkte, oder der Mod begrenzt die Bots.", "The map may not provide paths for all bots, or the mod limits them.");
+            Util.Log(AppPaths.Dir, "Bot mismatch on " + map + ": " + have + " instead of " + want);
+            Toast(msg, ToastKind.Warn);
         }
 
         void SetLog(string[] lines)

@@ -27,16 +27,33 @@ using Timer = System.Windows.Forms.Timer;
 namespace BF2Coop
 {
     // ------------------------------------------------------------------ Maps aus server.zip (mit Cache)
+    // Eine Coop-Map ist nur spielbar, wenn (gemessen mit bfp2, bf2all64, bf2sf64):
+    //  - info/<map>.desc einen Modus gpm_coop nennt – sonst lädt der Server die Map nicht und beendet sich nach ~30 s mit Code 0,
+    //  - server.zip ein Wegnetz für die Bots hat (AIPathFinding/*.qtr) und StrategicAreas.ai für die Größe – sonst können keine Bots spielen.
     public static class MapScanner
     {
         static readonly Regex Rx = new Regex(@"^gamemodes[/\\](gpm_coop|gpm_cq)[/\\](\d+)[/\\]", RegexOptions.IgnoreCase);
+        static readonly Regex RxCoopAi = new Regex(@"^gamemodes[/\\]gpm_coop[/\\](\d+)[/\\]ai[/\\]strategicareas\.ai$", RegexOptions.IgnoreCase);
+        static readonly Regex RxPath = new Regex(@"^aipathfinding[/\\][^/\\]+\.qtr$", RegexOptions.IgnoreCase);
+
+        // Nennt die Kartenbeschreibung den Coop-Modus? Fehlt die Datei, wird nicht gefiltert.
+        public static bool DescAllowsCoop(string mapDir)
+        {
+            try
+            {
+                string d = Path.Combine(mapDir, "info", Path.GetFileName(mapDir) + ".desc");
+                if (!File.Exists(d)) return true;
+                return Regex.IsMatch(File.ReadAllText(d), @"type\s*=\s*""gpm_coop""", RegexOptions.IgnoreCase);
+            }
+            catch { return true; }
+        }
 
         public static List<AvailMap> Scan(string gameDir, string mod, string cacheDir)
         {
             List<AvailMap> res = new List<AvailMap>();
             string lv = Path.Combine(gameDir, "mods", mod, "levels");
             if (!Directory.Exists(lv)) return res;
-            string cf = Path.Combine(cacheDir, "maps_" + Util.SafeName(mod) + ".txt");
+            string cf = Path.Combine(cacheDir, "maps2_" + Util.SafeName(mod) + ".txt"); // 2: Coop nur mit Bot-Daten
             Dictionary<string, string> cache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (string l in Util.ReadLines(cf))
             {
@@ -57,10 +74,12 @@ namespace BF2Coop
                 outCache.Add(zip + "|" + stamp + "|" + pairs);
                 string name = Path.GetFileName(dir);
                 string disp = Util.Pretty(name);
+                bool coopOk = DescAllowsCoop(dir);
                 foreach (string pr in pairs.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
                 {
                     string[] kv = pr.Split(':');
                     if (kv.Length != 2) continue;
+                    if (kv[0] == "gpm_coop" && !coopOk) continue;
                     AvailMap a = new AvailMap();
                     a.Name = name; a.Mode = kv[0]; a.Size = Util.ToInt(kv[1], 0); a.Dir = dir; a.Display = disp;
                     res.Add(a);
@@ -80,16 +99,20 @@ namespace BF2Coop
             return res;
         }
 
-        static string ReadPairs(string zip)
+        public static string ReadPairs(string zip)
         {
             List<string> list = new List<string>();
-            HashSet<string> seen = new HashSet<string>();
+            HashSet<string> seen = new HashSet<string>(), coopAi = new HashSet<string>();
+            bool path = false;
             try
             {
                 using (ZipArchive z = ZipFile.OpenRead(zip))
                 {
                     foreach (ZipArchiveEntry e in z.Entries)
                     {
+                        if (RxPath.IsMatch(e.FullName)) path = true;
+                        Match a = RxCoopAi.Match(e.FullName);
+                        if (a.Success) coopAi.Add(a.Groups[1].Value);
                         Match m = Rx.Match(e.FullName);
                         if (!m.Success) continue;
                         int size = Util.ToInt(m.Groups[2].Value, 0);
@@ -99,6 +122,8 @@ namespace BF2Coop
                 }
             }
             catch { }
+            // Coop ohne Bot-Daten ist nicht spielbar (z. B. wake_island_1707 in bfp2)
+            list.RemoveAll(delegate (string k) { return k.StartsWith("gpm_coop:") && (!path || !coopAi.Contains(k.Substring(9))); });
             return string.Join(",", list.ToArray());
         }
     }

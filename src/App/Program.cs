@@ -70,7 +70,8 @@ namespace BF2Coop
                 string lang = cfg.S("Lang", null);
                 I18n.En = lang != null ? lang == "en" : !System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("de", StringComparison.OrdinalIgnoreCase);
                 if (!GameLocator.IsGameDir(cfg.S("GameDir", null))) { string g = GameLocator.Find(); if (g != null) cfg.Set("GameDir", g); }
-                if (cfg.S("DocsDir", null) == null) cfg.Set("DocsDir", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
+                string docs = AppPaths.SyncDocs(cfg.S("DocsDir", null), AppPaths.Docs);
+                if (docs != cfg.S("DocsDir", null)) { cfg.Set("DocsDir", docs); try { cfg.Save(); } catch { } }
                 Dpi.Init();
                 Theme.Init();
                 ToolStripManager.Renderer = new DarkRenderer();

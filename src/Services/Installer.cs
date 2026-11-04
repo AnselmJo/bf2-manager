@@ -34,6 +34,35 @@ namespace BF2Coop
         public bool Outdated { get { return Installed && Version < AppInfo.ModuleVersion; } }
     }
 
+    // Spielmodus-Skript für Coop. Im Basisspiel ist gpm_coop.py bis auf Kommentare gleich gpm_cq.py.
+    // Manchen Mods fehlt es (z. B. bfp2) – dann scheitert jeder Coop-Start mit "failed to initialize gamemode".
+    // Es wird aus dem mod-eigenen gpm_cq.py erzeugt, damit die Regeln des Mods erhalten bleiben. Nie überschrieben.
+    public static class CoopScript
+    {
+        static readonly Encoding Lat1 = Encoding.GetEncoding(28591);
+
+        static string Dir(string gameDir, string mod) { return Path.Combine(gameDir, "mods", mod, "python", "game", "gamemodes"); }
+
+        public static bool Missing(string gameDir, string mod)
+        {
+            string d = Dir(gameDir, mod);
+            return File.Exists(Path.Combine(d, "gpm_cq.py")) && !File.Exists(Path.Combine(d, "gpm_coop.py"));
+        }
+
+        // true = angelegt
+        public static bool Create(string gameDir, string mod)
+        {
+            if (!Missing(gameDir, mod)) return false;
+            string d = Dir(gameDir, mod);
+            string t = File.ReadAllText(Path.Combine(d, "gpm_cq.py"), Lat1)
+                .Replace("print \"gpm_cq.py initialized\"", "print \"gpm_coop.py initialized\"")
+                .Replace("print \"gpm_cq.py uninitialized\"", "print \"gpm_coop.py uninitialized\"");
+            string nl = t.Contains("\r\n") ? "\r\n" : "\n";
+            File.WriteAllText(Path.Combine(d, "gpm_coop.py"), "# gpm_coop.py - created by BF2 Manager from this mod's gpm_cq.py (co-op uses the same game logic as conquest, as in the base game)" + nl + t, Lat1);
+            return true;
+        }
+    }
+
     public static class Installer
     {
         static readonly Encoding Lat1 = Encoding.GetEncoding(28591);
@@ -142,6 +171,11 @@ namespace BF2Coop
                             log.Add("+ " + mod + ": " + I18n.T("scoringCommon.py eingebunden", "scoringCommon.py hooked"));
                         }
                     }
+
+                    try { if (CoopScript.Create(gameDir, mod)) log.Add("+ " + mod + ": " + I18n.T("Coop-Spielmodus angelegt (gpm_coop.py fehlte)", "co-op game mode created (gpm_coop.py was missing)")); }
+                    catch (Exception ex) { log.Add("! " + mod + ": gpm_coop.py: " + ex.Message); }
+                    try { if (AiFile.DisableOverride(gameDir, mod, docsDir)) log.Add("+ " + mod + ": " + I18n.T("aiDefault.ai gibt die Bots nicht mehr fest vor (overrideMenuSettings 0)", "aiDefault.ai no longer forces the bots (overrideMenuSettings 0)")); }
+                    catch (Exception ex) { log.Add("! " + mod + ": aiDefault.ai: " + ex.Message); }
 
                     string cfg = Path.Combine(md, "settings", "coop_server.txt");
                     if (!File.Exists(cfg))

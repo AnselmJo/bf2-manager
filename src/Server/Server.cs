@@ -54,11 +54,34 @@ namespace BF2Coop
             }
         }
 
-        public static string Args(string mod, bool coop)
+        // cfgDir = Ordner mit serverSettings.con und maplist.con. Absoluter Pfad statt @HOME@: BF2 löst @HOME@ selbst
+        // zum Windows-Dokumentenordner auf; liegen die Dateien woanders (umgeleitete Dokumente, Parallels, OneDrive),
+        // findet der Server keine Karten und beendet sich nach etwa 30 s ohne Fehlermeldung.
+        public static string Args(string mod, bool coop, string cfgDir)
         {
-            string folder = coop ? "coop" : "conquest";
+            string dir = cfgDir.Replace('\\', '/').TrimEnd('/');
             return (coop ? "+ai 1 +gameMode gamemode " : "") +
-                "+config \"@HOME@/ServerConfigs/" + folder + "/serverSettings.con\" +mapList \"@HOME@/ServerConfigs/" + folder + "/maplist.con\" +modPath mods/" + mod + " +ignoreAsserts 1";
+                "+config \"" + dir + "/serverSettings.con\" +mapList \"" + dir + "/maplist.con\" +modPath mods/" + mod + " +ignoreAsserts 1";
+        }
+
+        // Beendet sich der Server mit Code 0 kurz nach dem Start, hat er nichts zu tun gefunden (Einstellungen oder
+        // Kartenliste fehlen, keine Map der Rotation lädt). Ein Neustart ändert daran nichts.
+        public const int QuickExitSeconds = 120;
+
+        public static bool ExitIsConfigProblem(int code, double seconds)
+        {
+            return code == 0 && seconds >= 0 && seconds < QuickExitSeconds;
+        }
+
+        // Verständlicher Grund für das Ende des Servers (für Banner, Meldungen und Log)
+        public static string ExitReason(int code, double seconds)
+        {
+            if (ExitIsConfigProblem(code, seconds))
+                return I18n.T("Der Server hat sich nach " + (int)seconds + " s ohne Fehler selbst beendet. Meist findet er seine Einstellungen oder die Kartenliste nicht, oder keine Map der Rotation lässt sich laden. Prüfe die Rotation und speichere einmal.",
+                              "The server quit by itself after " + (int)seconds + " s without an error. Usually it cannot find its settings or map list, or no map in the rotation loads. Check the rotation and save once.");
+            if (code == 0) return I18n.T("Der Server wurde beendet (Code 0).", "The server was shut down (code 0).");
+            if (code == 42) return I18n.T("BF2 hat den Server nach einem internen Fehler beendet (Code 42).", "BF2 shut the server down after an internal error (code 42).");
+            return I18n.T("Der Server ist abgestürzt (Code ", "The server crashed (code ") + code + ").";
         }
 
         public static List<string> LanAddresses()

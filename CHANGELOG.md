@@ -1,5 +1,25 @@
 ﻿# Changelog
 
+## [1.3.0]
+
+Bots that do what you set, coop that starts in every mod, Windows on ARM (Mac with Parallels) and readable update notes.
+
+### Fixed
+- **Bot count ignored in some mods:** mods like `bf2sf64` and `bfp2` ship an `ai\aiDefault.ai` with `overrideMenuSettings 1` – the game then always used the mod's own bots (31) and ignored count, distribution and difficulty from the manager. Before the server starts the manager now offers to switch this off (backup created); *Setup* does it for all mods.
+- **At most 32 bots:** the coop server never spawns more than 32 bots, no matter what `sv.maxPlayers` or `setMaxNBots` say (measured: 40 requested → 32). Planning, preview and the bot count field now respect this, and the default for 64-player maps is 32 instead of 40.
+- **Server stopped after 30 seconds:** the server was started with `@HOME@/ServerConfigs/…`, which BF2 resolves to the Windows *Documents* folder. If the manager's documents folder was elsewhere (Parallels shared folders, OneDrive, a changed folder), the server found no settings or map list and quit silently. The server now gets the real path, and the manager follows a changed *Documents* folder (existing server configs are copied over, nothing is overwritten).
+- **Coop failed with "failed to initialize gamemode":** some mods (e.g. `bfp2`) lack `python\game\gamemodes\gpm_coop.py`. The manager now creates it from the mod's own `gpm_cq.py` – in the base game both files are identical except for comments. Asked once before the server starts; *Setup* does it for all mods.
+- **Unplayable coop maps were offered:** a map only runs in coop if its `info\<map>.desc` lists `gpm_coop` (otherwise the server quits after about 30 s) and it has bot data (`AIPathFinding` and `StrategicAreas.ai` for the size). Maps without these are no longer offered for coop and are removed from the rotation (with *Undo*). Example: `bfp2` has three official coop maps; `wake_island_1707` has no bot paths at all.
+- **Update notes showed raw Markdown** (`### Fixed`, `*text*`, `**text**`) and were cut after 1500 characters. They are now formatted (headings, lists, bold, italic, code), scrollable and complete, without the GitHub download hint.
+- **Patching was blocked by any running server:** the 4 GB and unlock patches refused to work as soon as any BF2 game or server ran – even one from another folder. The manager now checks whether the file being patched is actually in use.
+
+### New
+- **Windows on ARM** (*Settings › This PC*): on ARM PCs (e.g. a Mac with Parallels) BF2 runs in Windows' x86 emulation and crashes at start or after the intro, and the server stops after a short time. The check shows what is missing and **Set up** fixes it without administrator rights: the emulation setting `ARM64CHPEDISABLED` for `BF2.exe` and `bf2_w32ded.exe` (Windows' hybrid system libraries compute `cos()` wrongly, so the menu shader `swiffmenu.fx` fails with "unexpected input register type"), and a 2-byte patch for `RendDX9.dll` / `RendDX9x2.dll`, which only know Intel and AMD processors ("Unknown processor family"). Backups are created.
+- **What's new?** in *Extras › Updates* shows the notes of a new version before you install it.
+- **Bots set vs. actual** on the *Live* page (e.g. *Bots 10/10*). If they differ for a while, the manager says why once per map – for example when the mod forces its own bots.
+- **Clear reason when the server stops:** the manager now knows the exit code and run time. If the server quit by itself right after starting (it found nothing to do), it says so and does not restart it three times in vain; crashes show their code.
+- **Bot module 6:** distributes bots for the 32 that actually spawn and reports the bot count of the current map.
+
 ## [1.2.3]
 
 Bug fixes and an easier download.

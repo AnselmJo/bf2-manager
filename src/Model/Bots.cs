@@ -87,6 +87,8 @@ namespace BF2Coop
     public class BotPlan
     {
         public int Count, Ratio, Diff, BotsUS, BotsMEC, HumansUS, HumansMEC;
+        public int Requested; // gewünschte Botzahl vor der Begrenzung durch das Spiel
+        public bool Capped { get { return Requested > Count; } }
         public int TotalUS { get { return HumansUS + BotsUS; } }
         public int TotalMEC { get { return HumansMEC + BotsMEC; } }
         public int Total { get { return TotalUS + TotalMEC; } }
@@ -94,6 +96,10 @@ namespace BF2Coop
 
     public static class Planner
     {
+        // Der Coop-Server setzt höchstens 32 Bots ein – unabhängig von sv.maxPlayers und aiDefault.ai (setMaxNBots).
+        // Gemessen mit bf2all64: 40 angefordert -> 32 (16/16), mit Ratio 75 -> 32 (8 US / 24 MEC).
+        public const int EngineMaxBots = 32;
+
         static int R(double x) { return (int)Math.Floor(x + 0.5); }
 
         // Kleinste Abweichung: welche Ratio ergibt gerundet genau b Bots im Team MEC? (gleich wie coopbots.py)
@@ -117,6 +123,8 @@ namespace BF2Coop
             int humans = hUS + hMEC;
             int count = o.Mode == "fill" ? o.Target - humans : o.Count;
             if (count < 0) count = 0;
+            int requested = count;
+            if (count > EngineMaxBots) count = EngineMaxBots;
             int ratio;
             if (o.DistKind == "enemy")
             {
@@ -128,7 +136,7 @@ namespace BF2Coop
             else ratio = o.DistVal;
             ratio = Util.Clamp(ratio, 0, 100);
             BotPlan p = new BotPlan();
-            p.Count = count; p.Ratio = ratio; p.Diff = Util.Clamp(o.Diff, 0, 100);
+            p.Count = count; p.Requested = requested; p.Ratio = ratio; p.Diff = Util.Clamp(o.Diff, 0, 100);
             p.BotsMEC = R(count * ratio / 100.0); p.BotsUS = count - p.BotsMEC;
             p.HumansUS = hUS; p.HumansMEC = hMEC;
             return p;
@@ -164,7 +172,7 @@ namespace BF2Coop
 
         public CoopState()
         {
-            Defaults[16] = BotOpt.Make(8, 30); Defaults[32] = BotOpt.Make(24, 30); Defaults[64] = BotOpt.Make(40, 30);
+            Defaults[16] = BotOpt.Make(8, 30); Defaults[32] = BotOpt.Make(24, 30); Defaults[64] = BotOpt.Make(Planner.EngineMaxBots, 30);
         }
 
         public BotOpt OptFor(MapEntry m)

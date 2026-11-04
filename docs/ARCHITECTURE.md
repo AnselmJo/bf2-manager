@@ -19,7 +19,7 @@ The manager never talks to the game server over the network. Everything goes thr
 |---|---|---|
 | `coop_server.txt` | manager | bot values per size and map, humans per team, commander, adaptive difficulty, one-time values |
 | `coop_cmd.txt` | manager | live commands with increasing IDs; only `sv.*`, `mapList.*`, `admin.*`, `game.say*`, `@nextmap`, `@commander` are executed |
-| `coop_live.txt` | module | heartbeat, map, team sizes, human players, module version |
+| `coop_live.txt` | module | heartbeat, map, team sizes, human players, module version, bot count the map was loaded with (`botsWanted`) |
 | `coop_status.txt` | module | log shown on the Live page |
 | `coop_rounds.txt` | module | one block per finished round for the leaderboard |
 
@@ -32,9 +32,9 @@ src/
   App/        MainForm (partial class, one file per page), Program, Config
   UI/         Theme, controls (cards, switches, lists, dialogs), widgets, command dialog
   Model/      settings table (bilingual), bot planning and coop_server.txt, leaderboard, command catalog
-  Game/       game folder and versions, mods and profiles, .con files, map scanner, patches (unlock, 4 GB, DirectX)
-  Server/     server process and live channel, coopbots.py (embedded)
-  Services/   installer, admin tasks (UAC), firewall, PC check, updater, LAN service, diagnostics
+  Game/       game folder and versions, mods and profiles, .con files, map scanner, patches (unlock, 4 GB, DirectX), Windows on ARM
+  Server/     server process, exit reasons and live channel, coopbots.py (embedded)
+  Services/   installer (incl. gpm_coop.py), admin tasks (UAC), firewall, PC check, updater and release notes, LAN service, diagnostics
 tests/        console test runner
 build/        icon, manifest, resource script, Linux build script
 ```
@@ -47,6 +47,8 @@ build/        icon, manifest, resource script, Linux build script
 - **Bilingual.** Every UI string is `T("Deutsch", "English")`; the settings table has both languages per row.
 - **Own scrolling.** `ScrollHost` replaces WinForms AutoScroll; the offset is clamped to the content height on every change.
 - **Never trust `Control.Visible` as state.** It returns false while the page is hidden. Layout code decides visibility from its own state.
+- **Absolute config paths for the server.** `+config`/`+mapList` get the real path; `@HOME@` is resolved by BF2 itself and can point to another *Documents* folder than the manager's.
+- **Patches that survive relocation.** `RendDX9.dll` is loaded at a different base address; patched bytes must not overlap a relocation entry. The CPU patch therefore only changes a relative jump (`jnz` → `jmp`).
 
 ## Updater
 

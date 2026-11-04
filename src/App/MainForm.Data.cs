@@ -111,7 +111,7 @@ namespace BF2Coop
                 PushUndo();
                 _st.Maps.RemoveAll(delegate (MapEntry m) { return m.Mode != ModeName || !_availIx.ContainsKey(m.Key); });
                 RefreshRot(_st.Maps.Count > 0 ? 0 : -1); RefreshAvail(); MarkDirty();
-                Toast(T("Aus der Rotation entfernt, weil im Mod nicht vorhanden: ", "Removed from the rotation because missing in the mod: ") + string.Join(", ", bad.GetRange(0, Math.Min(3, bad.Count)).ToArray()) + (bad.Count > 3 ? " …" : "") + T(" – „Rückgängig“ möglich.", " – “Undo” available."), ToastKind.Warn);
+                Toast(T("Aus der Rotation entfernt (im Mod nicht vorhanden oder ohne Bot-Daten): ", "Removed from the rotation (missing in the mod or without bot data): ") + string.Join(", ", bad.GetRange(0, Math.Min(3, bad.Count)).ToArray()) + (bad.Count > 3 ? " …" : "") + T(" – „Rückgängig“ möglich.", " – “Undo” available."), ToastKind.Warn);
             }
             if (res.Count == 0) Toast(T("Keine Maps im Mod gefunden: ", "No maps found in mod: ") + Path.Combine(GameDir, "mods", _mod, "levels"), ToastKind.Warn);
         }

@@ -1,4 +1,4 @@
-﻿// Spielordner, Versionen, Mods, Ablageorte - BF2 Manager. C# 5 (.NET Framework 4.x).
+// Spielordner, Versionen, Mods, Ablageorte - BF2 Manager. C# 5 (.NET Framework 4.x).
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -27,16 +27,16 @@ using Timer = System.Windows.Forms.Timer;
 [assembly: AssemblyTitle("BF2 Manager")]
 [assembly: AssemblyProduct("BF2 Manager")]
 [assembly: AssemblyDescription("Launcher and server manager for Battlefield 2 LAN parties with bots")]
-[assembly: AssemblyVersion("1.2.3.0")]
-[assembly: AssemblyFileVersion("1.2.3.0")]
+[assembly: AssemblyVersion("1.3.0.0")]
+[assembly: AssemblyFileVersion("1.3.0.0")]
 
 namespace BF2Coop
 {
     public static class AppInfo
     {
         public const string Name = "BF2 Manager";
-        public const string Version = "1.2.3";
-        public const int ModuleVersion = 5;
+        public const string Version = "1.3.0";
+        public const int ModuleVersion = 6;
         public const string Repo = "AnselmJo/bf2-manager";
         public const string RepoUrl = "https://github.com/" + Repo;
         public const string ExeName = "BF2Manager.exe";
@@ -55,6 +55,36 @@ namespace BF2Coop
         public static string ExeDir { get { return Path.GetDirectoryName(Exe) ?? "."; } }
         public static string Docs { get { return Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments); } }
         public static string LanDir(string gameDir) { return Path.Combine(gameDir, "_LAN"); }
+
+        // Liefert den Dokumentenordner, den der Manager verwenden soll. BF2 liest Profile immer aus dem aktuellen
+        // Windows-Dokumentenordner; zeigt der gespeicherte Wert woanders hin (z. B. Parallels-Freigabe wurde umgeschaltet,
+        // OneDrive), werden vorhandene Server-Konfigurationen in den aktuellen Ordner übernommen (nichts wird überschrieben).
+        public static string SyncDocs(string stored, string current)
+        {
+            if (string.IsNullOrEmpty(current) || !Directory.Exists(current)) return string.IsNullOrEmpty(stored) ? current : stored;
+            if (string.IsNullOrEmpty(stored) || SamePath(stored, current)) return current;
+            try
+            {
+                string from = Path.Combine(stored, "Battlefield 2", "ServerConfigs"), to = Path.Combine(current, "Battlefield 2", "ServerConfigs");
+                if (Directory.Exists(from)) CopyMissing(from, to);
+                Util.Log(Dir, "Documents folder changed: " + stored + " -> " + current);
+            }
+            catch { }
+            return current;
+        }
+
+        public static bool SamePath(string a, string b)
+        {
+            try { return string.Equals(Path.GetFullPath(a).TrimEnd('\\', '/'), Path.GetFullPath(b).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase); }
+            catch { return string.Equals(a, b, StringComparison.OrdinalIgnoreCase); }
+        }
+
+        static void CopyMissing(string from, string to)
+        {
+            Directory.CreateDirectory(to);
+            foreach (string f in Directory.GetFiles(from)) { string t = Path.Combine(to, Path.GetFileName(f)); if (!File.Exists(t)) File.Copy(f, t); }
+            foreach (string d in Directory.GetDirectories(from)) CopyMissing(d, Path.Combine(to, Path.GetFileName(d)));
+        }
 
         // Übernimmt Einstellungen älterer Versionen (BF2 Server Manager, BF2 Coop Manager), falls vorhanden.
         public static void Migrate()

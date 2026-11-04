@@ -44,10 +44,147 @@ namespace BF2Coop.Tests
             Run("moddesc", ModDesc);
             Run("commands", Cmds);
             Run("scrub", Scrub);
+            Run("serverargs", ServerArgs);
+            Run("notes", Notes);
+            Run("arm", Arm);
+            Run("coopmaps", CoopMaps);
             try { Directory.Delete(_tmp, true); } catch { }
             Console.WriteLine();
             Console.WriteLine(_pass + " passed, " + _fail + " failed");
             return _fail == 0 ? 0 : 1;
+        }
+
+        static void MakeMap(string levels, string name, string desc, params string[] entries)
+        {
+            string dir = Path.Combine(levels, name);
+            Directory.CreateDirectory(Path.Combine(dir, "info"));
+            if (desc != null) File.WriteAllText(Path.Combine(dir, "info", name + ".desc"), desc);
+            using (System.IO.Compression.ZipArchive z = System.IO.Compression.ZipFile.Open(Path.Combine(dir, "server.zip"), System.IO.Compression.ZipArchiveMode.Create))
+                foreach (string e in entries) using (StreamWriter w = new StreamWriter(z.CreateEntry(e).Open())) w.Write("x");
+        }
+
+        static void CoopMaps()
+        {
+            string game = Path.Combine(_tmp, "mapgame"), lv = Path.Combine(game, "mods", "bfp2", "levels");
+            string coopDesc = "<map><modes><mode type=\"gpm_cq\"></mode><mode type=\"gpm_coop\"><maptype ai=\"1\" players=\"16\"/></mode></modes></map>";
+            string cqDesc = "<map><modes><mode type=\"gpm_cq\"></mode><mode type=\"sp2\"></mode></modes></map>";
+            // wie black_beards_atol: Bot-Daten + Coop in der Beschreibung -> spielbar
+            MakeMap(lv, "good", coopDesc, "AIPathFinding/Infantry.qtr", "GameModes/gpm_coop/16/AI/StrategicAreas.ai", "GameModes/gpm_coop/16/GamePlayObjects.con", "GameModes/gpm_cq/16/GamePlayObjects.con");
+            // wie wake_island_1707: Coop-Ordner ohne Wegnetz
+            MakeMap(lv, "nopath", coopDesc, "GameModes/gpm_coop/16/GamePlayObjects.con", "GameModes/gpm_cq/16/GamePlayObjects.con");
+            // wie storm_the_bastion: Bot-Daten vorhanden, Beschreibung ohne Coop -> Server lädt die Map nicht
+            MakeMap(lv, "nodesc", cqDesc, "AIPathFinding/Infantry.qtr", "GameModes/gpm_coop/16/AI/StrategicAreas.ai", "GameModes/gpm_cq/16/GamePlayObjects.con");
+            // Coop 32 ohne StrategicAreas, Coop 16 vollständig
+            MakeMap(lv, "partial", coopDesc, "AIPathFinding/Infantry.qtr", "GameModes/gpm_coop/16/AI/StrategicAreas.ai", "GameModes/gpm_coop/32/GamePlayObjects.con");
+            List<AvailMap> maps = MapScanner.Scan(game, "bfp2", Path.Combine(_tmp, "mapcache"));
+            Predicate<string> has = delegate (string key) { return maps.Exists(delegate (AvailMap a) { return a.Key == key; }); };
+            Check(has("good|gpm_coop|16"), "coop maps: complete map is offered");
+            Check(!has("nopath|gpm_coop|16") && has("nopath|gpm_cq|16"), "coop maps: no bot path -> no coop, conquest still offered");
+            Check(!has("nodesc|gpm_coop|16"), "coop maps: description without gpm_coop -> not offered");
+            Check(has("partial|gpm_coop|16") && !has("partial|gpm_coop|32"), "coop maps: only sizes with StrategicAreas");
+
+            // gpm_coop.py fehlt (wie bfp2): aus gpm_cq.py anlegen, nie überschreiben
+            string gm = Path.Combine(game, "mods", "bfp2", "python", "game", "gamemodes");
+            Directory.CreateDirectory(gm);
+            File.WriteAllText(Path.Combine(gm, "gpm_cq.py"), "# conquest\r\nif g_debug: print \"gpm_cq.py initialized\"\r\ndef init():\r\n\tpass\r\n");
+            Check(CoopScript.Missing(game, "bfp2"), "coop script: missing detected");
+            Check(CoopScript.Create(game, "bfp2"), "coop script: created");
+            string coop = File.ReadAllText(Path.Combine(gm, "gpm_coop.py"));
+            Check(coop.Contains("def init():") && coop.Contains("gpm_coop.py initialized") && !coop.Contains("gpm_cq.py initialized"), "coop script: same logic as gpm_cq.py");
+            File.WriteAllText(Path.Combine(gm, "gpm_coop.py"), "own");
+            Check(!CoopScript.Create(game, "bfp2") && File.ReadAllText(Path.Combine(gm, "gpm_coop.py")) == "own", "coop script: existing file never overwritten");
+        }
+
+        static void Arm()
+        {
+            Check(ArmSupport.WithLayer("~ HIGHDPIAWARE", true) == "~ HIGHDPIAWARE ARM64CHPEDISABLED", "arm layer: added to existing entry");
+            Check(ArmSupport.WithLayer(null, true) == "~ ARM64CHPEDISABLED", "arm layer: new entry");
+            Check(ArmSupport.WithLayer("~ HIGHDPIAWARE ARM64CHPEDISABLED", false) == "~ HIGHDPIAWARE" && ArmSupport.WithLayer("~ ARM64CHPEDISABLED", false) == null, "arm layer: removed, others kept");
+            Check(ArmSupport.WithLayer("~ ARM64CHPEDISABLED", true) == "~ ARM64CHPEDISABLED", "arm layer: not duplicated");
+            Check(ArmSupport.HasLayer("~ HIGHDPIAWARE ARM64SAFEEMULATION") && !ArmSupport.HasLayer("~ HIGHDPIAWARE") && !ArmSupport.HasLayer(null), "arm layer: safe emulation also counts");
+
+            // CPU-Patch an einer künstlichen DLL mit der echten Code-Signatur aus RendDX9.dll
+            byte[] sig = { 0xFF, 0xD6, 0x83, 0xC4, 0x0C, 0x85, 0xC0, 0x75, 0x5D, 0x8B, 0x45, 0xF8, 0x25, 0xFF, 0x00, 0x00, 0x00, 0x83, 0xF8, 0x01, 0x74, 0x43 };
+            byte[] dll = new byte[4096]; dll[0] = (byte)'M'; dll[1] = (byte)'Z'; Array.Copy(sig, 0, dll, 2000, sig.Length);
+            string f = Path.Combine(_tmp, "RendDX9.dll"); File.WriteAllBytes(f, dll);
+            Check(ArmSupport.CpuPatchState(f) == PatchState.Off, "cpu patch: original detected");
+            ArmSupport.SetCpuPatch(f, true);
+            byte[] p = File.ReadAllBytes(f);
+            Check(p[2007] == 0xEB && p[2008] == 0x43 && ArmSupport.CpuPatchState(f) == PatchState.On, "cpu patch: jnz 5D -> jmp 43");
+            Check(File.Exists(f + ".vor_cpu.bak") && File.ReadAllBytes(f + ".vor_cpu.bak")[2007] == 0x75, "cpu patch: backup of the original");
+            Check(ArmSupport.SetCpuPatch(f, true).Contains("already") , "cpu patch: second run changes nothing");
+            ArmSupport.SetCpuPatch(f, false);
+            Check(ArmSupport.CpuPatchState(f) == PatchState.Off, "cpu patch: removed again");
+            string other = Path.Combine(_tmp, "Other.dll"); File.WriteAllBytes(other, new byte[512]);
+            Check(ArmSupport.CpuPatchState(other) == PatchState.Unknown, "cpu patch: unknown file version detected");
+            bool threw = false; try { ArmSupport.SetCpuPatch(other, true); } catch (InvalidOperationException) { threw = true; }
+            Check(threw && File.ReadAllBytes(other).Length == 512, "cpu patch: unknown file left unchanged");
+
+            // Emulationsschalter in einem eigenen Test-Zweig der Registry (HKCU\Software\BF2ManagerTests)
+            string exe = @"C:\Games\BF2\BF2.exe";
+            using (Microsoft.Win32.RegistryKey root = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\BF2ManagerTests"))
+            {
+                try
+                {
+                    ArmSupport.SetLayer(root, exe, true);
+                    Check(ArmSupport.LayerValue(root, exe) == "~ ARM64CHPEDISABLED", "arm layer: written to the registry");
+                    ArmSupport.SetLayer(root, exe, false);
+                    Check(ArmSupport.LayerValue(root, exe) == null, "arm layer: entry removed when empty");
+                }
+                finally { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(@"Software\BF2ManagerTests", false); }
+            }
+        }
+
+        static void Notes()
+        {
+            // Anfang des echten Release-Texts von v1.2.3 (vom Release-Workflow erzeugt)
+            string md = "Download **BF2Manager.exe** under *Assets* below. Start it (SmartScreen: *More info › Run anyway*). Already installed? The manager offers the update itself.\r\n\r\n---\r\n\r\n" +
+                "Bug fixes and an easier download.\r\n\r\n### Fixed\r\n- **Console results were invisible:** commands (e.g. `admin.listPlayers`) ran.\r\n" +
+                "- *Keep vehicles off* is marked *Conquest only*.\r\n  - nested item\r\n\r\n### New\r\n- **Link** to the [latest release](https://github.com/AnselmJo/bf2-manager/releases) at the top.\r\n";
+            List<NoteLine> l = ReleaseNotes.Parse(md);
+            Check(l.Count > 0 && l[0].Kind == NoteKind.Para && l[0].PlainText == "Bug fixes and an easier download.", "notes: GitHub download hint removed");
+            NoteLine h = l.Find(delegate (NoteLine n) { return n.Kind == NoteKind.Heading; });
+            Check(h != null && h.Level == 3 && h.PlainText == "Fixed", "notes: ### heading without hashes");
+            NoteLine b = l.Find(delegate (NoteLine n) { return n.Kind == NoteKind.Bullet; });
+            Check(b != null && b.Runs[0].Bold && b.Runs[0].Text == "Console results were invisible:", "notes: bullet with bold start");
+            Check(b.Runs.Exists(delegate (NoteRun r) { return r.Code && r.Text == "admin.listPlayers"; }), "notes: inline code");
+            string plain = ReleaseNotes.ToPlain(md);
+            Check(plain.IndexOf('*') < 0 && plain.IndexOf('`') < 0 && plain.IndexOf("###") < 0, "notes: no markdown characters left (" + plain.Length + " chars)");
+            Check(plain.Contains("latest release") && !plain.Contains("https://"), "notes: link shows its text only");
+            Check(l.Exists(delegate (NoteLine n) { return n.Kind == NoteKind.Bullet && n.Level == 1 && n.PlainText == "nested item"; }), "notes: nested bullet");
+            Check(l.Exists(delegate (NoteLine n) { return n.Kind == NoteKind.Bullet && n.Runs.Exists(delegate (NoteRun r) { return r.Italic && r.Text == "Conquest only"; }); }), "notes: italic");
+            Check(ReleaseNotes.StripDownloadHint("Intro\n\n---\n\nRest") == "Intro\n\n---\n\nRest", "notes: other text before a rule is kept");
+            Check(ReleaseNotes.Inline("3 * 4 = 12")[0].Text == "3 * 4 = 12", "notes: lone asterisk is not italic");
+        }
+
+        static void ServerArgs()
+        {
+            string a = Srv.Args("bf2sf64", true, @"C:\Users\aj\Documents\Battlefield 2\ServerConfigs\coop\");
+            Check(a.Contains("+config \"C:/Users/aj/Documents/Battlefield 2/ServerConfigs/coop/serverSettings.con\""), "server args: absolute config path with forward slashes");
+            Check(a.Contains("+mapList \"C:/Users/aj/Documents/Battlefield 2/ServerConfigs/coop/maplist.con\""), "server args: absolute maplist path");
+            Check(!a.Contains("@HOME@"), "server args: no @HOME@ (BF2 may resolve it to another Documents folder)");
+            Check(a.StartsWith("+ai 1 +gameMode gamemode ") && a.Contains("+modPath mods/bf2sf64"), "server args: coop flags and mod");
+            Check(!Srv.Args("bf2", false, "D:/cfg/conquest").Contains("+ai 1"), "server args: conquest without AI flags");
+
+            // Ende des Servers einordnen (gemessen: fehlende Konfiguration -> Code 0 nach ~32 s; Assertion -> Code 42)
+            Check(Srv.ExitIsConfigProblem(0, 32), "server exit: code 0 after 32 s is a config problem (no restart)");
+            Check(!Srv.ExitIsConfigProblem(0, 3600), "server exit: code 0 after an hour is a normal shutdown");
+            Check(!Srv.ExitIsConfigProblem(42, 10), "server exit: code 42 is a crash, not a config problem");
+            Check(Srv.ExitReason(0, 32).Contains("32 s") && Srv.ExitReason(42, 10).Contains("42") && Srv.ExitReason(-1073741819, 5).Contains("-1073741819"), "server exit: reasons mention time or code");
+
+            // Dokumentenordner hat sich geändert: Server-Konfigurationen werden übernommen, vorhandene nicht überschrieben
+            string oldDocs = Path.Combine(_tmp, "docs_old"), newDocs = Path.Combine(_tmp, "docs_new");
+            string oldCfg = Path.Combine(oldDocs, "Battlefield 2", "ServerConfigs", "coop"), newCfg = Path.Combine(newDocs, "Battlefield 2", "ServerConfigs", "coop");
+            Directory.CreateDirectory(oldCfg); Directory.CreateDirectory(newCfg);
+            File.WriteAllText(Path.Combine(oldCfg, "maplist.con"), "old maplist");
+            File.WriteAllText(Path.Combine(oldCfg, "serverSettings.con"), "old settings");
+            File.WriteAllText(Path.Combine(newCfg, "serverSettings.con"), "new settings");
+            string r = AppPaths.SyncDocs(oldDocs, newDocs);
+            Check(r == newDocs, "docs sync: switches to the current Documents folder");
+            Check(File.ReadAllText(Path.Combine(newCfg, "maplist.con")) == "old maplist", "docs sync: missing server config copied over");
+            Check(File.ReadAllText(Path.Combine(newCfg, "serverSettings.con")) == "new settings", "docs sync: existing file not overwritten");
+            Check(AppPaths.SyncDocs(newDocs, newDocs) == newDocs && AppPaths.SyncDocs(null, newDocs) == newDocs, "docs sync: unchanged and first start");
+            Check(AppPaths.SyncDocs(oldDocs, Path.Combine(_tmp, "missing")) == oldDocs, "docs sync: keeps stored folder if the current one does not exist");
         }
 
         static void Settings()
@@ -70,6 +207,23 @@ namespace BF2Coop.Tests
             BotOpt f = BotOpt.Make(8, 30); f.Mode = "fill"; f.Target = 32;
             BotPlan q = Planner.Plan(f, 8, 0);
             Check(q.Count == 24, "fill up to 32 with 8 humans = 24 bots");
+            BotPlan c = Planner.Plan(BotOpt.Make(40, 30), 1, 0);
+            Check(c.Count == 32 && c.Requested == 40 && c.Capped, "engine limit: 40 bots requested -> 32");
+            BotOpt cr = BotOpt.Make(40, 30); cr.DistKind = "ratio"; cr.DistVal = 75;
+            BotPlan cp = Planner.Plan(cr, 0, 0);
+            Check(cp.BotsMEC == 24 && cp.BotsUS == 8, "engine limit: ratio applies to the 32 bots that spawn (8 US / 24 MEC, as measured)");
+            Check(new CoopState().Defaults[64].Count <= Planner.EngineMaxBots, "64-player default within the engine limit");
+
+            // aiDefault.ai mit overrideMenuSettings 1 (wie bf2sf64/bfp2) wird abgeschaltet, mit Sicherung
+            string game = Path.Combine(_tmp, "aigame"), ai = Path.Combine(game, "mods", "bf2sf64", "ai");
+            Directory.CreateDirectory(ai);
+            File.WriteAllText(Path.Combine(ai, "aidefault.ai"), "aiSettings.setNSides 2\r\naiSettings.overrideMenuSettings 1\r\naiSettings.setMaxNBots 31\r\naiSettings.setBotSkill 0.5\r\n");
+            Check(AiFile.Load(game, "bf2sf64").OverridesManager, "ai override detected");
+            Check(AiFile.DisableOverride(game, "bf2sf64", Path.Combine(_tmp, "aidocs")), "ai override disabled");
+            AiFile after = AiFile.Load(game, "bf2sf64");
+            Check(!after.OverridesManager && after.Override == 0 && after.MaxBots == 31 && after.Skill == "0.5", "ai override off, other values kept");
+            Check(!AiFile.DisableOverride(game, "bf2sf64", Path.Combine(_tmp, "aidocs")), "ai override: second run changes nothing");
+            Check(Directory.Exists(Path.Combine(_tmp, "aidocs", "BF2_Backups")), "ai override: backup created");
         }
 
         static void CoopTxtRoundtrip()

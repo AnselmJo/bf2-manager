@@ -3,7 +3,7 @@
 # commands from the app (coop_cmd.txt). No network port, no password.
 # Python 2.3 compatible (BF2 server): no sorted(), no generator expressions,
 # no "with", no "x if y else z", no "except X as e".
-MODULE_VERSION = 5
+MODULE_VERSION = 6
 import time
 import sys
 import host
@@ -12,6 +12,9 @@ import bf2
 # Vom Installer gesetzt (Schraegstriche, keine Backslashes):
 CONFIG_PATHS = ["@CFG_ABS@", "@CFG_REL@"]
 POLL_SECONDS = 5
+# The coop server never uses more than 32 bots (independent of sv.maxPlayers and aiDefault.ai);
+# the distribution must be computed for the bots that actually spawn.
+MAX_BOTS = 32
 ALLOWED_PREFIXES = ("sv.", "mapList.", "admin.", "game.say")
 
 g_started = 0
@@ -26,6 +29,8 @@ g_adapt = 0
 # and a map that was only reloaded does not count as a finished round for the leaderboard.
 g_skipEndUntil = 0.0
 g_noRecordUntil = 0.0
+# Bot count the current map was loaded with (sv.coopBotCount at round start) - the manager compares it with the bots that actually play.
+g_wanted = -1
 
 
 def toInt(s, dflt):
@@ -190,6 +195,8 @@ def computeBots(opt, size, hUS, hMEC):
         count = target - humans
     if count < 0:
         count = 0
+    if count > MAX_BOTS:
+        count = MAX_BOTS
     dist = opt.get("dist", "ratio:50")
     kind = dist
     val = 50
@@ -398,6 +405,7 @@ def queryTickets(team):
 
 
 def onGameStatusChanged(status):
+    global g_wanted
     try:
         log("GameStatus=" + str(status))
         if status == bf2.GameStatus.EndGame:
@@ -412,6 +420,10 @@ def onGameStatusChanged(status):
                 applyForNext("EndGame")
         elif status == bf2.GameStatus.PreGame or status == bf2.GameStatus.Playing:
             applyCommander("round start")
+            if status == bf2.GameStatus.PreGame or g_wanted < 0:
+                w = queryInt("sv.coopBotCount")
+                if w is not None:
+                    g_wanted = w
     except:
         logErr()
 
@@ -434,6 +446,7 @@ def writeLive():
     text = text + "nextUsed=" + str(g_usedNextId) + "\n"
     text = text + "module=" + str(MODULE_VERSION) + "\n"
     text = text + "adapt=" + str(g_adapt) + "\n"
+    text = text + "botsWanted=" + str(g_wanted) + "\n"
     try:
         for p in bf2.playerManager.getPlayers():
             if p.isAIPlayer():

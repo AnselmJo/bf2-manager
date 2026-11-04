@@ -131,6 +131,20 @@ namespace BF2Coop
             return a;
         }
 
+        // overrideMenuSettings 1 lässt aiDefault.ai Botzahl, Verteilung und Schwierigkeit fest vorgeben –
+        // dann wirkt nichts, was der Manager einstellt (z. B. bf2sf64 und bfp2: immer 31 Bots).
+        public bool OverridesManager { get { return Path != null && Override == 1; } }
+
+        // Schaltet das Überschreiben aus (mit Sicherung). true = Datei geändert.
+        public static bool DisableOverride(string gameDir, string mod, string docsDir)
+        {
+            AiFile a = Load(gameDir, mod);
+            if (!a.OverridesManager) return false;
+            a.Override = 0;
+            a.Save(docsDir);
+            return true;
+        }
+
         public void Save(string docsDir)
         {
             Util.Backup(new string[] { Path }, docsDir);

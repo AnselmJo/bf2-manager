@@ -86,7 +86,7 @@ namespace BF2Coop
             if (_crashed)
             {
                 _cfgBanner.Visible = true; _cfgBanner.Tint = Theme.Red; _cfgBanner.Glyph = G.Warn;
-                _cfgBanner.Text2 = T("Server wurde unerwartet beendet.", "The server stopped unexpectedly.");
+                _cfgBanner.Text2 = _srvExit ?? T("Server wurde unerwartet beendet.", "The server stopped unexpectedly.");
                 _bCfgAction.Text = T("Neu starten", "Restart");
             }
             else if (_running)
@@ -308,8 +308,42 @@ namespace BF2Coop
                     if (p.Total > m.Size) { warn.Add(Util.Pretty(m.Name) + " " + m.Size + ": " + p.Total + T(" Spieler", " players")); }
                 }
             if (err.Count > 0) { DarkDialog.Info(this, T("Server kann nicht starten", "Server cannot start"), "• " + string.Join("\n• ", err.ToArray())); return false; }
+            if (_coop && !CheckCoopScript()) return false;
+            if (_coop && !CheckAiOverride()) return false;
             if (warn.Count > 0) Toast(T("Mehr Spieler als Plätze: ", "More players than slots: ") + string.Join(", ", warn.GetRange(0, Math.Min(3, warn.Count)).ToArray()), ToastKind.Warn);
             return true;
+        }
+
+        // Mods ohne gpm_coop.py (z. B. bfp2) scheitern bei jedem Coop-Start mit "failed to initialize gamemode". false = Start abbrechen.
+        bool CheckCoopScript()
+        {
+            if (!CoopScript.Missing(GameDir, _mod)) return true;
+            string msg = T("Dem Mod „", "The mod “") + _mod + T("“ fehlt das Coop-Spielmodus-Skript (gpm_coop.py). Ohne es bricht der Server mit „failed to initialize gamemode“ ab.\n\nJetzt anlegen? Der Manager erzeugt es aus dem Conquest-Skript des Mods (gpm_cq.py) – so ist es auch im Basisspiel gelöst. Vorhandene Dateien werden nicht verändert.",
+                "” is missing its co-op game mode script (gpm_coop.py). Without it the server stops with “failed to initialize gamemode”.\n\nCreate it now? The manager builds it from the mod's conquest script (gpm_cq.py) – the same as in the base game. Existing files are not changed.");
+            if (!DarkDialog.Confirm(this, T("Coop-Spielmodus fehlt", "Co-op game mode missing"), msg, T("Anlegen und starten", "Create and start"), false)) return false;
+            try { CoopScript.Create(GameDir, _mod); Toast(T("Coop-Spielmodus angelegt.", "Co-op game mode created."), ToastKind.Ok); return true; }
+            catch (UnauthorizedAccessException) { Toast(T("Keine Schreibrechte im Spielordner – Einstellungen › Dieser PC › Schreibrechte.", "No write access to the game folder – Settings › This PC › Write access."), ToastKind.Error); return false; }
+            catch (Exception ex) { Toast(ex.Message, ToastKind.Error); return false; }
+        }
+
+        // Mods wie bf2sf64 und bfp2 geben die Bots in aiDefault.ai fest vor (overrideMenuSettings 1).
+        // Vor dem Start anbieten, das abzuschalten. false = Start abbrechen.
+        bool CheckAiOverride()
+        {
+            AiFile a = AiFile.Load(GameDir, _mod);
+            if (!a.OverridesManager) return true;
+            string fixedBots = a.MaxBots >= 0 ? a.MaxBots.ToString() : "?";
+            string msg = T("Der Mod „", "The mod “") + _mod + T("“ gibt die Bots fest vor (", "” forces its own bots (") + fixedBots +
+                T(" Bots, aiDefault.ai: overrideMenuSettings 1). Deine Einstellungen für Botzahl, Verteilung und Schwierigkeit hätten keine Wirkung.\n\nJetzt beheben? Der Wert wird auf 0 gesetzt, eine Sicherung wird angelegt.",
+                  " bots, aiDefault.ai: overrideMenuSettings 1). Your bot count, distribution and difficulty would have no effect.\n\nFix it now? The value is set to 0 and a backup is created.");
+            if (!DarkDialog.Confirm(this, T("Mod überschreibt die Bots", "Mod overrides the bots"), msg, T("Beheben und starten", "Fix and start"), false))
+            {
+                Toast(T("Start mit den festen Bots des Mods.", "Starting with the mod's fixed bots."), ToastKind.Warn);
+                return true;
+            }
+            try { AiFile.DisableOverride(GameDir, _mod, DocsDir); LoadAiAndNames(); Toast(T("Bot-Einstellungen des Managers gelten jetzt.", "The manager's bot settings now apply."), ToastKind.Ok); return true; }
+            catch (UnauthorizedAccessException) { Toast(T("Keine Schreibrechte im Spielordner – Einstellungen › Dieser PC › Schreibrechte.", "No write access to the game folder – Settings › This PC › Write access."), ToastKind.Error); return false; }
+            catch (Exception ex) { Toast(ex.Message, ToastKind.Error); return false; }
         }
 
         static bool PortFree(int port)

@@ -58,10 +58,23 @@ While the server runs, **Server** shows the **live view**: players (kick), curre
 
 *Settings › Diagnostics*: detected problems, **Server log**, **Export diagnostics** (ZIP with versions, Windows version, mods, configuration, logs and problems – without passwords, user names and public IP addresses), **Repair**.
 
+## Bots and coop maps
+
+- The coop server uses **at most 32 bots** – on every map size and independent of `sv.maxPlayers`. The manager plans with this limit.
+- Some mods force their own bot count in `ai\aiDefault.ai` (`overrideMenuSettings 1`, e.g. `bf2sf64`, `bfp2`). Then count, distribution and difficulty from the manager have no effect. Before the server starts the manager offers to switch this off; *Setup* does it for all mods. The *Live* page shows *Bots set/actual*.
+- A map is offered for coop only if it can run there: its `info\<map>.desc` lists `gpm_coop` and it has bot data (`AIPathFinding` and `StrategicAreas.ai` for the size). If a mod lacks the coop game mode script `gpm_coop.py`, the manager creates it from the mod's `gpm_cq.py`.
+
+## Windows on ARM (Mac with Parallels)
+
+BF2 runs on ARM PCs in Windows' x86 emulation, but needs two adjustments. *Settings › This PC* shows a **Windows on ARM** check; **Set up** applies both (no administrator rights; close the game and the server first):
+
+1. **Emulation setting `ARM64CHPEDISABLED`** for `BF2.exe` and `bf2_w32ded.exe` (stored per user under *Compatibility* of the exe). Without it the menu shader fails ("swiffmenu.fx … unexpected input register type"), the game crashes after the intro and the server stops after about 25 seconds.
+2. **CPU patch** for `RendDX9.dll` and `RendDX9x2.dll`. They only know Intel and AMD processors; the emulated processor causes "Unknown processor family" and BF2 quits. The patch treats it like a known Intel processor (2 bytes, backup `*.vor_cpu.bak`).
+
 ## Keyboard
 
 F5 start/stop server · Ctrl+1 … pages in sidebar order
 
 ## Where things are stored
 
-Settings, presets, recent configurations and your default: `%APPDATA%\BF2Manager` · backups of changed game files: `Documents\BF2_Backups` · server configs: `Documents\Battlefield 2\ServerConfigs`
+Settings, presets, recent configurations and your default: `%APPDATA%\BF2Manager` · backups of changed game files: `Documents\BF2_Backups` · server configs: `Documents\Battlefield 2\ServerConfigs` (the current Windows *Documents* folder; if it changes, the manager copies the server configs over)

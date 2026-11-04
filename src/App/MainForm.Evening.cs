@@ -1,6 +1,7 @@
 // Hauptfenster: Abend-Funktionen (Bestenliste, geplante Nachrichten, Wächter) - BF2 Manager. C# 5.
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -12,6 +13,7 @@ namespace BF2Coop
         Card _cBoard, _cMsg; LeaderTable _board;
         TextField _msgText; NumberBox _msgMin; ToggleSwitch _msgRepeat; readonly List<FormRow> _msgRows = new List<FormRow>();
         bool _userStopped; readonly List<DateTime> _wdRestarts = new List<DateTime>();
+        Process _srvProc; string _srvExit; // zuletzt gestarteter Server und der verständliche Grund für sein Ende
         DateTime _boardStamp = DateTime.MinValue; readonly Dictionary<string, DateTime> _msgDue = new Dictionary<string, DateTime>();
 
         void BuildEvening()
@@ -129,10 +131,35 @@ namespace BF2Coop
             if (_board.Height != oldH && _page == PgLive) LayoutLive();
         }
 
-        // Server ist ohne Zutun beendet worden: neu starten (höchstens 3-mal in 10 Minuten)
+        // Exit-Code und Laufzeit des zuletzt gestarteten Servers. false = unbekannt (z. B. von außen gestartet).
+        bool ServerExit(out int code, out double seconds)
+        {
+            code = 0; seconds = -1;
+            try
+            {
+                if (_srvProc == null || !_srvProc.HasExited) return false;
+                code = _srvProc.ExitCode;
+                seconds = (_srvProc.ExitTime - _srvStart).TotalSeconds;
+                return true;
+            }
+            catch { return false; }
+        }
+
+        // Server ist ohne Zutun beendet worden: neu starten (höchstens 3-mal in 10 Minuten).
+        // Hat er sich nur selbst beendet, weil er nichts zu tun fand, hilft ein Neustart nicht – dann den Grund zeigen.
         void Watchdog()
         {
-            if (!_cfg.B("Watchdog", true) || _setupMode) { _crashed = true; UpdateServerBanners(); Toast(T("Server wurde unerwartet beendet.", "The server stopped unexpectedly."), ToastKind.Error); return; }
+            int code; double secs;
+            bool known = ServerExit(out code, out secs);
+            _srvExit = known ? Srv.ExitReason(code, secs) : null;
+            if (known) Util.Log(AppPaths.Dir, "Server ended: exit code " + code + " after " + (int)secs + " s");
+            if (known && Srv.ExitIsConfigProblem(code, secs))
+            {
+                _crashed = true; _srvStart = DateTime.MinValue; UpdateServerBanners();
+                DarkDialog.Info(this, T("Server hat sich beendet", "Server stopped"), _srvExit);
+                return;
+            }
+            if (!_cfg.B("Watchdog", true) || _setupMode) { _crashed = true; UpdateServerBanners(); Toast(_srvExit ?? T("Server wurde unerwartet beendet.", "The server stopped unexpectedly."), ToastKind.Error); return; }
             _wdRestarts.RemoveAll(delegate (DateTime d) { return (DateTime.Now - d).TotalMinutes > 10; });
             if (_wdRestarts.Count >= 3)
             {
@@ -142,7 +169,7 @@ namespace BF2Coop
             }
             _wdRestarts.Add(DateTime.Now);
             Util.Log(AppPaths.Dir, "Watchdog: server stopped unexpectedly, restarting (" + _wdRestarts.Count + ")");
-            Toast(T("Server abgestürzt – Wächter startet ihn neu …", "Server crashed – watchdog is restarting it …"), ToastKind.Warn);
+            Toast((known ? _srvExit + " " : "") + T("Wächter startet ihn neu …", "Watchdog is restarting it …"), ToastKind.Warn);
             StartServerProcess();
         }
     }

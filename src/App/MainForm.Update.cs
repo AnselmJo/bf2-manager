@@ -11,7 +11,7 @@ namespace BF2Coop
 {
     public partial class MainForm
     {
-        Card _cUpdate; Para _updInfo; FlatButton _bUpdCheck, _bUpdInstall, _bUpdRollback; ToggleSwitch _updAuto;
+        Card _cUpdate; Para _updInfo; FlatButton _bUpdCheck, _bUpdInstall, _bUpdNotes, _bUpdRollback; ToggleSwitch _updAuto;
         ReleaseInfo _updFound; bool _updBusy, _updExit;
 
         void BuildUpdateCard()
@@ -26,15 +26,18 @@ namespace BF2Coop
             _bUpdCheck.Click += delegate { CheckForUpdates(true); };
             _bUpdInstall = new FlatButton(T("Jetzt installieren", "Install now"), G.Save, BtnKind.Primary);
             _bUpdInstall.Click += delegate { if (_updFound != null) InstallUpdate(_updFound.ExeUrl, _updFound.SumsUrl, _updFound.Version, _updFound.Notes); };
+            _bUpdNotes = new FlatButton(T("Was ist neu?", "What's new?"), G.Info, BtnKind.Ghost);
+            Theme.Tip.SetToolTip(_bUpdNotes, T("Zeigt die Änderungen der neuen Version, bevor du sie installierst.", "Shows the changes in the new version before you install it."));
+            _bUpdNotes.Click += delegate { if (_updFound != null) NotesDialog.Show(this, T("Neu in Version ", "New in version ") + _updFound.Version, _updFound.Notes, null); };
             _bUpdRollback = new FlatButton(T("Vorherige Version", "Previous version"), G.Undo, BtnKind.Ghost);
             Theme.Tip.SetToolTip(_bUpdRollback, T("Stellt die Version vor dem letzten Update wieder her.", "Restores the version before the last update."));
             _bUpdRollback.Click += delegate { Rollback(); };
-            ButtonRow br = Buttons(_bUpdCheck, _bUpdInstall, _bUpdRollback);
+            ButtonRow br = Buttons(_bUpdCheck, _bUpdInstall, _bUpdNotes, _bUpdRollback);
             foreach (Control c in new Control[] { rAuto, _updInfo, br }) _cUpdate.Controls.Add(c);
             _cUpdate.Layouter = Stack(_cUpdate, delegate
             {
-                _bUpdInstall.Visible = _updFound != null; _bUpdRollback.Visible = Updater.CanRollback;
-                foreach (Control b in new Control[] { _bUpdInstall, _bUpdRollback }) if (!b.Visible) br.Controls.Remove(b); else if (!br.Controls.Contains(b)) br.Controls.Add(b);
+                _bUpdInstall.Visible = _bUpdNotes.Visible = _updFound != null; _bUpdRollback.Visible = Updater.CanRollback;
+                foreach (Control b in new Control[] { _bUpdInstall, _bUpdNotes, _bUpdRollback }) if (!b.Visible) br.Controls.Remove(b); else if (!br.Controls.Contains(b)) br.Controls.Add(b);
                 return new List<Control> { rAuto, _updInfo, br };
             });
         }
@@ -135,9 +138,9 @@ namespace BF2Coop
             try { if (File.Exists(Updater.NotesFile)) { notes = File.ReadAllText(Updater.NotesFile); File.Delete(Updater.NotesFile); } } catch { }
             int nl = notes.IndexOf('\n');
             if (nl >= 0) notes = notes.Substring(nl + 1);
-            if (notes.Length > 1500) notes = notes.Substring(0, 1500) + " …";
-            DarkDialog.Info(this, T("Aktualisiert auf ", "Updated to ") + AppInfo.Version, (notes.Trim().Length > 0 ? notes.Trim() : T("Das Update wurde installiert.", "The update was installed.")) +
-                (_mods.Count > 0 ? T("\n\nFalls ein Server läuft: einmal neu starten, damit das Bot-Modul aktuell ist.", "\n\nIf a server is running: restart it once so the bot module is up to date.") : ""));
+            if (notes.Trim().Length == 0) notes = T("Das Update wurde installiert.", "The update was installed.");
+            NotesDialog.Show(this, T("Aktualisiert auf ", "Updated to ") + AppInfo.Version, notes,
+                _mods.Count > 0 ? T("Falls ein Server läuft: einmal neu starten, damit das Bot-Modul aktuell ist.", "If a server is running: restart it once so the bot module is up to date.") : null);
         }
     }
 }

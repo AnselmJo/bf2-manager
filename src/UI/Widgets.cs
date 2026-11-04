@@ -80,13 +80,13 @@ namespace BF2Coop
         void Sync()
         {
             bool fill = SegMode.SelectedIndex == 1, ratio = SegDist.SelectedIndex == 1;
-            NumCount.SetRange(fill ? 1 : 0, 128); NumCount.SetSilent(fill ? _target : _fixed); NumCount.Suffix = fill ? I18n.T("Spieler", "players") : "Bots";
+            NumCount.SetRange(fill ? 1 : 0, fill ? 128 : Planner.EngineMaxBots); NumCount.SetSilent(fill ? _target : Math.Min(_fixed, Planner.EngineMaxBots)); NumCount.Suffix = fill ? I18n.T("Spieler", "players") : "Bots";
             NumDist.SetRange(0, ratio ? 100 : 300); NumDist.SetSilent(ratio ? _ratio : _enemy);
             _lt[1] = fill ? I18n.T("Spieler gesamt", "Total players") : I18n.T("Anzahl Bots", "Number of bots");
             _lt[3] = ratio ? I18n.T("Anteil Bots im Team MEC", "Bots on team MEC") : I18n.T("Team MEC größer um", "Team MEC larger by");
             _iCount.SetTip(fill
-                ? I18n.T("Spieler gesamt\nZiel für Menschen und Bots zusammen. Beispiel: 32 bei 8 Menschen ergibt 24 Bots.\n\nsv.coopBotCount = Ziel − Menschen", "Total players\nTarget for humans and bots together. Example: 32 with 8 humans gives 24 bots.\n\nsv.coopBotCount = target − humans")
-                : I18n.T("Anzahl Bots\nSo viele Bots spielen auf dieser Mapgröße, egal wie viele Menschen da sind.\n\nsv.coopBotCount", "Number of bots\nThis many bots play on this map size, no matter how many humans join.\n\nsv.coopBotCount"));
+                ? I18n.T("Spieler gesamt\nZiel für Menschen und Bots zusammen. Beispiel: 32 bei 8 Menschen ergibt 24 Bots.\nBF2 setzt höchstens 32 Bots ein.\n\nsv.coopBotCount = Ziel − Menschen", "Total players\nTarget for humans and bots together. Example: 32 with 8 humans gives 24 bots.\nBF2 uses at most 32 bots.\n\nsv.coopBotCount = target − humans")
+                : I18n.T("Anzahl Bots\nSo viele Bots spielen auf dieser Mapgröße, egal wie viele Menschen da sind.\nBF2 setzt höchstens 32 Bots ein, auch auf 64er Maps.\n\nsv.coopBotCount", "Number of bots\nThis many bots play on this map size, no matter how many humans join.\nBF2 uses at most 32 bots, even on 64-player maps.\n\nsv.coopBotCount"));
             _iDistVal.SetTip(ratio
                 ? I18n.T("Anteil Bots im Team MEC\n100 % = alle Bots gegen euch, 50 % = Bots gleichmäßig auf beide Teams.", "Bots on team MEC\n100 % = all bots against you, 50 % = bots split evenly.")
                 : I18n.T("Team MEC größer um\n0 % = gleich große Teams, 50 % = MEC hat anderthalbmal so viele Spieler, 100 % = doppelt so viele.", "Team MEC larger by\n0 % = equal teams, 50 % = MEC has one and a half times as many players, 100 % = twice as many."));

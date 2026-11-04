@@ -70,7 +70,7 @@ namespace BF2Coop
             _aiOverride = new ToggleSwitch(); _aiInclude = new ToggleSwitch(); _aiMax = new NumberBox(0, 255, 64, null);
             _aiInfo = new Para(""); _aiInfo.Color = Theme.Amber;
             FormRow rO = new FormRow(T("Menü-Werte überschreiben", "Override menu settings"), T("overrideMenuSettings\nBei 1 können die Werte dieser Datei die Bot-Einstellungen des Managers überschreiben. Empfohlen: aus.", "overrideMenuSettings\nWhen on, this file's values may override the manager's bot settings. Recommended: off."), _aiOverride, _aiOverride.Width, false);
-            FormRow rM = new FormRow(T("Bot-Obergrenze", "Bot limit"), T("setMaxNBots\nHöchstzahl an Bots, die der Mod zulässt. Sollte mindestens so hoch sein wie die größte Botzahl.", "setMaxNBots\nMaximum number of bots the mod allows. Should be at least your largest bot count."), _aiMax, _aiMax.Width, false);
+            FormRow rM = new FormRow(T("Bot-Obergrenze", "Bot limit"), T("setMaxNBots\nBotzahl, die der Mod bei aktivem Überschreiben fest vorgibt. Ist das Überschreiben aus, hat der Wert auf dem Server keine Wirkung; dort gelten die Werte des Managers (höchstens 32 Bots).", "setMaxNBots\nBot count the mod forces while override is on. With override off it has no effect on the server; the manager's values apply (at most 32 bots)."), _aiMax, _aiMax.Width, false);
             FormRow rI = new FormRow(T("Menschen zählen mit", "Humans count toward limit"), T("maxBotsIncludeHumans\nAn: Menschen werden auf die Bot-Obergrenze angerechnet.", "maxBotsIncludeHumans\nOn: humans count toward the bot limit."), _aiInclude, _aiInclude.Width, false);
             foreach (Control c in new Control[] { rO, rM, rI, _aiInfo }) _cAi.Controls.Add(c);
             EventHandler ac = delegate { if (!_applying) { _aiDirty = true; MarkDirty(); UpdateAiInfo(); } };
@@ -182,9 +182,9 @@ namespace BF2Coop
         {
             string t = "";
             if (_ai == null || _ai.Path == null) t = T("aiDefault.ai wurde in diesem Mod nicht gefunden.", "aiDefault.ai was not found in this mod.");
-            else if (_aiOverride.Checked) t = T("Achtung: Bei aktivem Überschreiben kann die KI-Datei Botzahl und Schwierigkeit des Managers ersetzen.", "Note: with override on, the AI file may replace the manager's bot count and difficulty.");
-            int maxBots = 0; foreach (BotEditor ed in _botEd.Values) maxBots = Math.Max(maxBots, Planner.Plan(ed.Opt, _hUS.Value, _hMEC.Value).Count);
-            if (_ai != null && _ai.MaxBots >= 0 && _aiMax.Value < maxBots) t += (t.Length > 0 ? "\n" : "") + T("Die Bot-Obergrenze ist kleiner als eure größte Botzahl (", "The bot limit is lower than your largest bot count (") + maxBots + ").";
+            else if (_aiOverride.Checked) t = T("Achtung: Bei aktivem Überschreiben gibt die KI-Datei die Bots fest vor – Botzahl, Verteilung und Schwierigkeit des Managers wirken dann nicht. Empfohlen: aus.", "Note: with override on, the AI file forces its own bots – the manager's bot count, distribution and difficulty have no effect. Recommended: off.");
+            int wanted = 0; foreach (BotEditor ed in _botEd.Values) wanted = Math.Max(wanted, Planner.Plan(ed.Opt, _hUS.Value, _hMEC.Value).Requested);
+            if (wanted > Planner.EngineMaxBots) t += (t.Length > 0 ? "\n" : "") + T("BF2 setzt höchstens 32 Bots ein – eingestellt sind bis zu ", "BF2 uses at most 32 bots – you set up to ") + wanted + ".";
             if (_aiInfo.Text != t) { _aiInfo.Text = t; _botHost.Masonry(_botCards, 3); }
             _cAi.NoteColor = _aiOverride.Checked ? Theme.Amber : Theme.Dim; _cAi.Invalidate();
         }

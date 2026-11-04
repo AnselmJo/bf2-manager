@@ -91,7 +91,7 @@ namespace BF2Coop
         // Ein- und Ausschalten ändert nur die zwei Bytes, damit andere Patches (4 GB) erhalten bleiben.
         public static string Apply(string exe, bool on)
         {
-            if (Srv.GameRunning()) throw new InvalidOperationException(I18n.T("Battlefield 2 läuft noch. Bitte zuerst beenden.", "Battlefield 2 is still running. Please close it first."));
+            if (Pe.InUse(exe)) throw new InvalidOperationException(I18n.T("Battlefield 2 läuft noch. Bitte zuerst beenden.", "Battlefield 2 is still running. Please close it first."));
             byte[] d = File.ReadAllBytes(exe);
             byte[] from = on ? Orig : Done, to = on ? Done : Orig;
             if (Pe.Find(d, to, 0) >= 0) return on ? I18n.T("Bereits freigeschaltet.", "Already unlocked.") : I18n.T("Bereits im Originalzustand.", "Already original.");
@@ -117,6 +117,16 @@ namespace BF2Coop
                 if (k == pat.Length) return i;
             }
             return -1;
+        }
+
+        // Läuft genau diese exe? Windows sperrt eine laufende exe gegen Schreiben. Prüft die Datei selbst statt aller
+        // BF2-Prozesse, damit ein Server aus einem anderen Ordner (oder eine Testkopie) nicht fälschlich blockiert.
+        public static bool InUse(string exe)
+        {
+            try { using (new FileStream(exe, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) { } return false; }
+            catch (FileNotFoundException) { return false; }
+            catch (UnauthorizedAccessException) { return false; } // keine Schreibrechte: das Schreiben danach meldet es verständlich
+            catch (IOException) { return true; }
         }
 
         public static void BackupOnce(string file, string suffix)
@@ -149,7 +159,7 @@ namespace BF2Coop
 
         public static string SetLaa(string exe, bool on)
         {
-            if (Srv.GameRunning() || Srv.IsRunning()) throw new InvalidOperationException(I18n.T("Spiel oder Server läuft noch. Bitte zuerst beenden.", "Game or server is still running. Please close it first."));
+            if (InUse(exe)) throw new InvalidOperationException(I18n.T("Spiel oder Server läuft noch. Bitte zuerst beenden.", "Game or server is still running. Please close it first."));
             byte[] d = File.ReadAllBytes(exe);
             int pe = Header(d);
             if (pe < 0) throw new InvalidOperationException(I18n.T("Keine gültige exe-Datei.", "Not a valid exe file."));
