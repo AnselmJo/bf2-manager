@@ -18,12 +18,12 @@ A welcome window asks for two things: the **game folder** (found automatically; 
 
 **Play** – the main view. Running servers on the network appear automatically with map, size, mode, players, bots and mod. The list updates itself every few seconds; **Refresh** clears it and searches right away. A server running on this PC is always listed and marked *this PC*.
 - **✓ Compatible** → click **Join**. The game starts in the server's mod, logs in and joins.
-- **⚠ Mod missing / different version** → **Get files from server** compares your mod with the server PC and copies only what differs (each file is verified).
+- **⚠ Mod missing / files differ** → just click **Join**: the manager compares your mod with the server PC by file content, copies only what differs (each file is verified) and then starts the game. Fun packs (mods with a `fun.recipe`) need only a few KB; their base mod is synced first if needed. The first time a server PC offers a mod it checks all files once (a notice shows when it starts and when it is ready); until then players are compared by version number.
 - **Manager x.y – update** appears when the server PC has a newer manager.
 - No server? *Start game without server* opens the main menu. *Server not found?* lets you enter an IP (only needed for VPN LANs).
 - When something on this PC needs attention, a yellow bar with **Fix** appears at the top; when all is well the card just shows *✓ This PC is ready*.
 
-**Settings** – This PC (check and fixes, click to expand; *Server search on LAN* tests whether the firewall lets the manager's announcements through and offers *Allow in firewall*), Game start (windowed, skip intro, log in automatically), Graphics (incl. optional ReShade), Audio, Mods (versions), Updates, Diagnostics, Language, Folders (incl. *Change game folder*).
+**Settings** – This PC (check and fixes, click to expand; *Server search on LAN* tests whether the firewall lets the manager's announcements through and offers *Allow in firewall*), Game start (**join automatically** – joins as soon as a server starts on the LAN and fetches missing files first; windowed, skip intro, log in automatically), Graphics (incl. optional ReShade), Audio, Mods (versions), Updates, Diagnostics, Language, Folders (incl. *Change game folder*).
 
 **ReShade (optional)** – image filters for a sharper, more vivid look. The manager does not ship ReShade; *Set up* explains how to install it from the official ReShade website (Direct3D 9, select BF2.exe). Afterwards a switch turns it on and off. If BF2 freezes, switch it off first.
 
@@ -45,6 +45,8 @@ While the server runs, **Server** shows the **live view**: players (kick), curre
 **Bots** – default bot values per map size (16/32/64), humans per team, adaptive difficulty, **bot radio messages** on/off (applies at the next server start), bot names and the mod's AI file (*Advanced*).
 
 **Options** – every server setting. Cards *Server behaviour* (automatic restart after a crash or hang, server unlocks, LAN service) and *Default* (use current values as your default for all mods, reset to default, factory settings). While the server runs: ⚡ values apply immediately, the bar shows how many changes need a restart and offers **Restart now**.
+
+**Fun round** (Options › *Advanced*) – for the odd party round. **Create and use** builds a small mod `<mod>_fun` next to the selected mod (its folders are links to the base mod, which stays unchanged) and selects it; then (re)start the server. Rules: C4 per player and force (C4 trampoline), blast damage to soldiers, no fall damage, mega mine and jump claymore for Spec Ops (key 5, press again to switch), rocket jump, rocket speed and count, instant rocket reload, 99 magazines for all hand weapons, sprint without stamina, gravity (60 % = high jumps, applies to everything). Players get the pack automatically when they press **Join** (a few KB). **Back to base mod** returns to the normal mod, **Remove** deletes the pack.
 
 ## When do changes apply?
 

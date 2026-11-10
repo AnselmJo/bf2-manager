@@ -63,7 +63,7 @@ namespace BF2Coop
                 _cfg.Set("SrvAdv", _advToggle.Checked); _cfg.Save();
                 Card first = null;
                 // Karten ohne Gruppe (Server-Verhalten, Standard) bleiben immer sichtbar
-                foreach (Card c in _srvCards) { GroupDef g = c.Tag as GroupDef; if (g != null && g.Adv) { c.Hidden = !_advToggle.Checked; if (first == null) first = c; } }
+                foreach (Card c in _srvCards) { GroupDef g = c.Tag as GroupDef; if ((g != null && g.Adv) || c == _cFun) { c.Hidden = !_advToggle.Checked; if (first == null) first = c; } }
                 _srvHost.Masonry(_srvCards, 2);
                 if (_advToggle.Checked && first != null) _srvHost.EnsureVisible(first);
             };

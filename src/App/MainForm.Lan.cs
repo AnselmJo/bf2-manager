@@ -63,6 +63,7 @@ namespace BF2Coop
             h.Max = Util.ToInt(_vals["sv.maxPlayers"], 64); h.Mode = _coop ? "coop" : "cq"; h.Running = _running;
             foreach (MapEntry me in _st.Maps) if (string.Equals(me.Name, h.Map, StringComparison.OrdinalIgnoreCase)) { h.Size = me.Size; break; }
             h.Id = InstanceId; h.HttpPort = Lan.HttpPort; h.Version = AppInfo.Version; h.ModVersion = ModInfo.Read(GameDir, h.Mod).Version ?? "";
+            h.Fp = _lanFiles != null && _lanFiles.Error == null ? ModPrints.Get(GameDir, h.Mod) ?? "" : "";
             List<string> ips = Srv.LanAddresses(); h.Ip = ips.Count > 0 ? ips[0] : "127.0.0.1"; h.Self = true; h.Seen = DateTime.Now;
             return h;
         }
@@ -77,6 +78,8 @@ namespace BF2Coop
                 else if (_lanListen != null && _lanListen.Error == null) SendProbe();
             }
             if (_page == PgPlayer && !_syncBusy) RefreshServers(false);
+            HostPrintTick();
+            AutoJoinTick();
             // Ändert sich, ob die eigene Bekanntmachung ankommt, den PC-Check neu laufen lassen
             bool? e = EchoState;
             if (e != null && e != _echoShown) RefreshChecks(true);
@@ -109,7 +112,7 @@ namespace BF2Coop
             if (_firstBeacon == DateTime.MinValue) _firstBeacon = DateTime.Now;
             LanHost h = OwnHost(live);
             string payload = Lan.Payload(h.Name, h.GamePort, h.Mod, h.Map, h.Humans, h.Max, h.Mode, h.Running)
-                + "|" + h.Id + "|" + h.Size + "|" + h.Bots + "|" + Lan.Esc(h.ModVersion);
+                + "|" + h.Id + "|" + h.Size + "|" + h.Bots + "|" + Lan.Esc(h.ModVersion) + "|" + Lan.Esc(h.Fp);
             ThreadPool.QueueUserWorkItem(delegate { try { Lan.Announce(payload); } catch { } });
         }
 
@@ -175,11 +178,99 @@ namespace BF2Coop
             SetSync(sb.ToString());
         }
 
-        static string SizeText(long b)
+        static string SizeText(long b) { return ModSync.SizeText(b); }
+
+        // Mod, den dieser PC im LAN anbietet
+        string HostedMod { get { return _mod.Length > 0 ? _mod : PlayMod ?? ""; } }
+
+        // ---- Host: Fortschritt der einmaligen Prüfsummen-Berechnung (bei großen Mods einige Minuten)
+        bool _hostPrintShown; string _hostPrintMod;
+        void HostPrintTick()
         {
-            if (b >= 1L << 30) return (b / (double)(1L << 30)).ToString("0.0") + " GB";
-            if (b >= 1L << 20) return (b / (double)(1L << 20)).ToString("0.0") + " MB";
-            return Math.Max(1, b / 1024) + " KB";
+            if (_lanFiles == null || _lanFiles.Error != null || _shotDir != null) return;
+            string mod = HostedMod; if (mod.Length == 0) return;
+            ModPrints.Get(GameDir, mod);   // stößt die Berechnung an, falls nötig
+            int pct; double secs;
+            bool busy = ModPrints.Busy(GameDir, mod, out pct, out secs);
+            if (busy && secs > 4 && (!_hostPrintShown || _hostPrintMod != mod))
+            {
+                _hostPrintShown = true; _hostPrintMod = mod;
+                Toast(T("Bereite den Abgleich für Mitspieler vor: prüfe einmalig alle Dateien von „", "Preparing sync for players: checking all files of “") + mod + T("“ … Der Fortschritt steht unter Optionen › Server-Verhalten. Beitreten geht schon.", "” once … Progress is shown under Options › Server behaviour. Joining already works."), ToastKind.Info);
+            }
+            else if (!busy && _hostPrintShown && _hostPrintMod == mod)
+            {
+                _hostPrintShown = false;
+                Toast(T("Abgleich bereit: Mitspieler sehen jetzt, ob ihr „", "Sync ready: players now see whether their “") + mod + T("“ dem Server entspricht.", "” matches the server."), ToastKind.Ok);
+            }
+            if (busy || _lanInfoBusy) { _lanInfoBusy = busy; RefreshLanInfo(); }
+        }
+        bool _lanInfoBusy;
+
+        // ---- Spieler: automatisch beitreten, sobald genau ein Server im LAN startet
+        readonly HashSet<string> _autoSeen = new HashSet<string>();
+        bool AutoJoinOn { get { return _cfg.B("AutoJoin", false); } }
+
+        void AutoJoinTick()
+        {
+            if (_lanListen == null || _fakeHosts != null) return;
+            List<LanHost> running = new List<LanHost>();
+            foreach (LanHost h in _lanListen.Hosts()) if (h.Running && !h.Self) running.Add(h);
+            // Server, die nicht mehr laufen, vergessen – startet er neu, wird wieder beigetreten
+            HashSet<string> now = new HashSet<string>(); foreach (LanHost h in running) now.Add(h.Key);
+            _autoSeen.RemoveWhere(delegate (string k) { return !now.Contains(k); });
+            if (!AutoJoinOn || _host || _running || _syncBusy || running.Count != 1 || Srv.GameRunning() || !GameLocator.IsGameDir(GameDir)) { foreach (string k in now) if (!AutoJoinOn) _autoSeen.Add(k); return; }
+            LanHost s = running[0];
+            if (_autoSeen.Contains(s.Key)) return;
+            _autoSeen.Add(s.Key);
+            Toast(T("Server „", "Server “") + s.Name + T("“ gestartet – trete automatisch bei …", "” started – joining automatically …"), ToastKind.Ok);
+            FlushPlayer();
+            JoinHost(s, true);
+        }
+
+        // „Beitreten“: passt der Mod, startet das Spiel sofort; sonst erst fehlende oder abweichende Dateien holen, dann starten
+        void JoinHost(LanHost h) { JoinHost(h, false); }
+
+        // auto = automatisches Beitreten: ohne Rückfrage abgleichen (der Spieler hat es so eingestellt)
+        void JoinHost(LanHost h, bool auto)
+        {
+            if (Srv.GameRunning()) { Toast(T("Battlefield 2 läuft bereits.", "Battlefield 2 is already running."), ToastKind.Info); return; }
+            bool ok; Compat(h, out ok);
+            if (ok || h.Self) { StartGame(h.Ip, h.GamePort, h.Mod); return; }
+            if (_syncBusy) { Toast(T("Ein Abgleich läuft schon.", "A sync is already running."), ToastKind.Info); return; }
+            bool missing = !Directory.Exists(Path.Combine(GameDir, "mods", h.Mod));
+            if (_running && string.Equals(_mod, h.Mod, StringComparison.OrdinalIgnoreCase)) { Toast(T("Bitte zuerst den eigenen Server beenden.", "Please stop your own server first."), ToastKind.Warn); return; }
+            if (!Installer.CanWrite(Path.Combine(GameDir, "mods"))) { Toast(T("Keine Schreibrechte im Ordner mods – PC-Check › Schreibrechte.", "No write access to the mods folder – PC check › write access."), ToastKind.Error); return; }
+            string msg = (missing ? T("Der Mod „", "The mod “") + h.Mod + T("“ fehlt auf diesem PC.", "” is missing on this PC.")
+                                  : T("Der Mod „", "The mod “") + h.Mod + T("“ unterscheidet sich vom Server-PC.", "” differs from the server PC."))
+                + T("\n\nDer Manager holt jetzt nur die fehlenden oder abweichenden Dateien vom Server-PC „", "\n\nThe manager now fetches only the missing or different files from the server PC “") + h.Name
+                + T("“ und startet danach das Spiel. Beim ersten Mal kann das ein paar Minuten dauern.\nAbweichende Dateien werden ersetzt, zusätzliche eigene Dateien bleiben.", "” and then starts the game. The first time this can take a few minutes.\nDifferent files are replaced, extra files of your own stay.");
+            if (!auto && !DarkDialog.Confirm(this, T("Abgleichen und beitreten", "Sync and join"), msg, T("Abgleichen und beitreten", "Sync and join"), false)) return;
+            _syncBusy = true; _syncCancel = false; _syncPlan = null; _syncHost = h;
+            SetSync(T("Verbinde mit dem Server-PC …", "Connecting to the server PC …"));
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                ModSync.Result res = null; string err = null;
+                try
+                {
+                    res = ModSync.Run(h, GameDir, delegate (string s) { try { BeginInvoke((MethodInvoker)delegate { SetSync(s); }); } catch { } }, delegate { return _syncCancel; });
+                }
+                catch (OperationCanceledException) { err = T("Abgebrochen.", "Cancelled."); }
+                catch (Exception ex) { err = ex.Message; }
+                try
+                {
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        _syncBusy = false;
+                        if (err != null) { SetSync("⚠ " + T("Abgleich nicht möglich: ", "Sync failed: ") + err + T("\nFirewall auf dem Server-PC prüfen (PC-Check) und erneut „Beitreten“.", "\nCheck the firewall on the server PC (PC check) and press “Join” again.")); return; }
+                        SetSync("✓ " + (res.Files == 0 ? T("Alles war schon gleich.", "Everything already matched.") : res.Files + T(" Dateien geholt (", " files fetched (") + SizeText(res.Bytes) + ")")
+                            + (res.Links > 0 ? T(" · Spaß-Aufsatz eingerichtet", " · fun pack set up") : "") + T(" – Spiel startet …", " – starting the game …"));
+                        RefreshStatus(); RefreshServers(true);
+                        StartGame(h.Ip, h.GamePort, h.Mod);
+                    });
+                }
+                catch { }
+            });
+            if (_page == PgPlayer) _plHost.Masonry(_plCards, 2);
         }
 
         // Abweichende und fehlende Dateien vom Server-PC holen (jede Datei geprüft, erst danach ersetzt)

@@ -146,7 +146,13 @@ namespace BF2Coop
             if (LanHostOn)
             {
                 if (_lanFiles != null && _lanFiles.Error != null) sb.Append(T("⚠ Datei-Dienst nicht gestartet: ", "⚠ File service not started: ")).Append(_lanFiles.Error);
-                else sb.Append(T("✓ Aktiv – andere PCs sehen diesen Server und können Dateien abgleichen.", "✓ Active – other PCs see this server and can compare files."));
+                else
+                {
+                    sb.Append(T("✓ Aktiv – andere PCs sehen diesen Server und können Dateien abgleichen.", "✓ Active – other PCs see this server and can compare files."));
+                    string hm = HostedMod; int pct; double secs;
+                    if (hm.Length > 0 && ModPrints.Busy(GameDir, hm, out pct, out secs))
+                        sb.Append('\n').Append(T("⏳ Prüfe Dateien von „", "⏳ Checking files of “")).Append(hm).Append(T("“ für den Abgleich: ", "” for syncing: ")).Append(pct).Append(" %");
+                }
             }
             else sb.Append(T("Aus – dieser PC sucht nur nach Servern.", "Off – this PC only looks for servers."));
             _lanInfo.Text = sb.ToString().TrimEnd();

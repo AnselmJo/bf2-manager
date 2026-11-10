@@ -76,8 +76,15 @@ namespace BF2Coop
             FormRow rWin = new FormRow(T("Fenstermodus", "Windowed"), T("Startet BF2 im Fenster mit der Auflösung aus der Grafik-Karte.", "Starts BF2 in a window with the resolution from the graphics card."), _plWindowed, _plWindowed.Width, false);
             FormRow rIntro = new FormRow(T("Intro überspringen", "Skip intro"), T("Überspringt die Intro-Videos – beim Start über den Manager und dauerhaft im Profil.", "Skips the intro videos – when started from the manager and permanently in the profile."), _plIntro, _plIntro.Width, false);
             FormRow rLogin = new FormRow(T("Automatisch anmelden", "Log in automatically"), T("Übergibt das Profil beim Start (+playerName), damit man beim direkten Beitreten nicht im Anmeldemenü hängen bleibt. Nur für Offline-Profile.", "Passes the profile at start (+playerName) so joining directly does not stop at the login menu. Offline profiles only."), _plAutoLogin, _plAutoLogin.Width, false);
-            foreach (Control c in new Control[] { rWin, rIntro, rLogin }) _cPlay.Controls.Add(c);
-            _cPlay.Layouter = Stack(_cPlay, delegate { return new List<Control> { rWin, rIntro, rLogin }; });
+            ToggleSwitch tAuto = new ToggleSwitch(); tAuto.SetSilent(_cfg.B("AutoJoin", false));
+            tAuto.CheckedChanged += delegate
+            {
+                _cfg.Set("AutoJoin", tAuto.Checked); _cfg.Save();
+                if (tAuto.Checked) Toast(T("Sobald ein Server im LAN startet, tritt der Manager bei – fehlende Dateien holt er vorher.", "As soon as a server starts on the LAN, the manager joins – fetching missing files first."), ToastKind.Info);
+            };
+            FormRow rAuto = new FormRow(T("Automatisch beitreten", "Join automatically"), T("Startet ein Server im LAN, tritt der Manager von selbst bei: erst fehlende oder abweichende Mod-Dateien holen (ohne Rückfrage), dann Battlefield 2 starten.\nNur wenn genau ein Server läuft und dieser PC nicht selbst hostet. Pro Serverstart einmal – wer das Spiel beendet, wird nicht erneut hineingeholt.", "When a server starts on the LAN, the manager joins by itself: first fetch missing or different mod files (without asking), then start Battlefield 2.\nOnly when exactly one server runs and this PC does not host. Once per server start – if you quit the game you are not pulled back in."), tAuto, tAuto.Width, false);
+            foreach (Control c in new Control[] { rAuto, rWin, rIntro, rLogin }) _cPlay.Controls.Add(c);
+            _cPlay.Layouter = Stack(_cPlay, delegate { return new List<Control> { rAuto, rWin, rIntro, rLogin }; });
 
             // ---- Server im Netzwerk (Hauptansicht für Spieler)
             _cLan = new Card(T("Server im Netzwerk", "Servers on the network"), G.Globe);
@@ -317,7 +324,15 @@ namespace BF2Coop
         {
             ok = false;
             if (!GameLocator.IsGameDir(GameDir)) return T("Spielordner fehlt", "Game folder missing");
-            if (!Directory.Exists(Path.Combine(GameDir, "mods", h.Mod))) return T("Mod „", "Mod “") + h.Mod + T("“ fehlt auf diesem PC", "” is missing on this PC");
+            if (!Directory.Exists(Path.Combine(GameDir, "mods", h.Mod))) return T("Mod „", "Mod “") + h.Mod + T("“ fehlt – „Beitreten“ holt ihn vom Server-PC", "” missing – “Join” fetches it from the server PC");
+            // Neuere Server-PCs melden eine Prüfsumme über alle Mod-Dateien: genauer als die Versionsnummer
+            if (!string.IsNullOrEmpty(h.Fp) && !h.Self)
+            {
+                string mine = ModPrints.Get(GameDir, h.Mod);
+                if (mine == null) return T("Prüfe Mod-Dateien …", "Checking mod files …");
+                if (mine != h.Fp) return T("Dateien weichen vom Server-PC ab – „Beitreten“ gleicht ab", "Files differ from the server PC – “Join” syncs them");
+                ok = true; return T("Kompatibel (gleiche Dateien)", "Compatible (same files)");
+            }
             string lv = ModInfo.Read(GameDir, h.Mod).Version;
             if (!string.IsNullOrEmpty(h.ModVersion) && !string.IsNullOrEmpty(lv) && lv != h.ModVersion) return T("Andere Mod-Version (hier ", "Different mod version (here ") + lv + T(", Server ", ", server ") + h.ModVersion + ")";
             ok = true; return T("Kompatibel", "Compatible");
@@ -367,7 +382,8 @@ namespace BF2Coop
                 if (!have) hosts.Insert(0, OwnHost(_lastLive));
             }
             StringBuilder sig = new StringBuilder();
-            foreach (LanHost h in hosts) sig.Append(h.Key).Append(h.Map).Append(h.Humans).Append(h.Bots).Append(h.Mod).Append(h.ModVersion).Append(h.Version).Append(';');
+            foreach (LanHost h in hosts) sig.Append(h.Key).Append(h.Map).Append(h.Humans).Append(h.Bots).Append(h.Mod).Append(h.ModVersion).Append(h.Version).Append(h.Fp)
+                .Append(string.IsNullOrEmpty(h.Fp) || h.Self ? "" : ModPrints.Get(GameDir, h.Mod)).Append(';');
             if (!force && sig.ToString() == _lanSig) return;
             _lanSig = sig.ToString();
             foreach (Control c in _lanRows) { _cLan.Controls.Remove(c); c.Dispose(); }
@@ -385,10 +401,11 @@ namespace BF2Coop
                 Para st = new Para((ok ? "✓ " : "⚠ ") + compat); st.Color = ok ? Theme.Green : Theme.Amber; st.Font = Theme.SmallB;
                 ButtonRow btns = new ButtonRow();
                 FlatButton bj = new FlatButton(T("Beitreten", "Join"), G.Play, BtnKind.Primary);
-                bj.Enabled = ok;
-                bj.Click += delegate { FlushPlayer(); StartGame(host.Ip, host.GamePort, host.Mod); };
+                bj.Enabled = GameLocator.IsGameDir(GameDir);
+                Theme.Tip.SetToolTip(bj, T("Beitreten\nPasst der Mod, startet Battlefield 2 direkt auf diesem Server. Sonst holt der Manager vorher nur die fehlenden oder abweichenden Dateien vom Server-PC.", "Join\nIf the mod matches, Battlefield 2 starts straight on this server. Otherwise the manager first fetches only the missing or different files from the server PC."));
+                bj.Click += delegate { FlushPlayer(); JoinHost(host); };
                 btns.Add(bj);
-                if (!ok || _cfg.B("ShowCompare", false))
+                if (_cfg.B("ShowCompare", false))
                 {
                     FlatButton bc = new FlatButton(T("Dateien vom Server holen", "Get files from server"), G.Down, ok ? BtnKind.Ghost : BtnKind.Secondary);
                     Theme.Tip.SetToolTip(bc, T("Vergleicht die Mod-Dateien mit dem Server-PC und holt nur, was fehlt oder anders ist.", "Compares the mod files with the server PC and fetches only what is missing or different."));

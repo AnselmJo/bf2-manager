@@ -38,7 +38,7 @@ Install ReShade once into your game folder (from the official ReShade website; s
 
 ## 2. Copy the folder to every PC
 
-USB stick, network share – whatever is fastest. Changed something later? Players can fetch the differences from your PC: **Play › Get files from server**.
+USB stick, network share – whatever is fastest. Changed something later? Players just click **Join** – the manager fetches the differences from your PC first.
 
 ## 3. On every player PC
 
@@ -67,7 +67,7 @@ USB stick, network share – whatever is fastest. Changed something later? Playe
 | Problem | Solution |
 |---|---|
 | Server not listed | **Fix** on **both** PCs (firewall) – *Settings › This PC › Server search on LAN* shows whether announcements get through. Moved the exe? Let the manager copy itself into the game folder. Same network? VPN LAN: *Server not found?* and enter the IP. |
-| "Modified content" or kicked after joining | Play › Get files from server |
+| "Modified content" or kicked after joining | Play › Join (syncs the files first) |
 | Join stops at the login screen | Settings › Game start › Log in automatically on; offline profile selected |
 | Game freezes when joining | Play › *Game stuck? Close it*, then Play › Profile › **Repair profile**; ReShade off; check that the server still runs |
 | Game does not start / missing d3dx9 file | **Fix** (DirectX) |

@@ -21,7 +21,8 @@ One single `.exe`, no installation, German and English. Two modes, switched at t
 
 **Play**
 - Automatic server discovery on the LAN – no IP addresses
-- **Join compatibility:** mod present and same version? If not, fetch the files from the server PC with one click
+- **One-click join:** mod missing or different (checked by file content)? *Join* fetches only what differs from the server PC, then starts the game – or let the manager join automatically as soon as a server starts
+- **Fun round:** C4 trampoline, rocket jumps, slow rockets, endless ammo and sprint, low gravity – as a small extra mod, the base mod stays untouched
 - **First-start window:** game folder and player name in one step – the manager creates the BF2 profile
 - **Profiles in the manager:** change name (applies right away), new, repair (when BF2 hangs), delete – always with a backup
 - Health check: one **Fix** button when something is missing (DirectX 9, firewall, 4 GB patch, unlock weapons, player name)

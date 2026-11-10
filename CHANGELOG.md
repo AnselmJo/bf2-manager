@@ -1,5 +1,20 @@
 ﻿# Changelog
 
+## [1.4.0]
+
+One click to join – the manager brings missing mod files along – plus a fun round for party nights.
+
+### Added
+- **Join automatically (Settings › Game start):** as soon as a server starts on the LAN, the manager syncs the mod if needed and joins – once per server start, only when exactly one server runs and this PC does not host.
+- **Host sees sync preparation:** the first time a mod is offered, the server PC checks all its files once (minutes for large mods). A notice appears at the start and when it is ready; *Options › Server behaviour* shows the progress in percent.
+- **Join syncs by itself:** *Join* is always available. If the mod is missing or differs from the server PC, the manager fetches only the missing or different files and then starts the game – one click, one confirmation.
+- **Compare by content, not version number:** the server PC announces a checksum over all mod files. Players see *Compatible (same files)* only if every file matches, so changed files with an unchanged `mod.desc` version are caught.
+- **Fun packs (`fun.recipe`):** a small mod folder that links its folders to a base mod (`mods\<mod>\fun.recipe` with `Base=<mod>`) and carries only its own archives. Joining transfers just those few files, syncs the base mod first if needed and creates the links on the player PC.
+- **Fun round (Options › Advanced):** builds `<mod>_fun` from the selected mod without touching it – C4 count and force (C4 trampoline), no fall damage, low blast damage to soldiers, Spec Ops also gets a mega mine (throws vehicles) and a jump claymore, rocket jump, slow dodgeable rockets with many rockets and instant reload, 99 magazines for all hand weapons, sprint without stamina and lower gravity for high jumps. *Create and use* selects it; *Back to base mod* and *Remove* undo it. Tested with `bf2all64`, `bf2sf64` and `bfp2`.
+
+### Changed
+- The file list ignores linked folders (junctions), so a fun pack is never sent as a second full copy of its base mod.
+
 ## [1.3.0]
 
 Bots that do what you set, coop that starts in every mod, Windows on ARM (Mac with Parallels) and readable update notes.

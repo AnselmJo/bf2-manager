@@ -36,6 +36,7 @@ namespace BF2Coop.Tests
             Run("laa", Laa);
             Run("unlock", Unlock);
             Run("lan", LanTests);
+            Run("fun", FunTests);
             Run("leaderboard", Board);
             Run("profiles", ProfileFiles);
             Run("profilemanage", ProfileManage);
@@ -318,6 +319,62 @@ namespace BF2Coop.Tests
             LanHost h2 = Lan.Parse(Lan.Payload("S", 16567, "bf2all64", "karkand", 3, 64, "coop", true) + "|abc123|32|24|1.0", System.Net.IPAddress.Parse("10.0.0.5"));
             LanHost h3 = Lan.Parse(Lan.Payload("S", 16567, "bf2all64", "karkand", 3, 64, "coop", true) + "|abc123|32|24|1.0", System.Net.IPAddress.Parse("10.0.0.6"));
             Check(h2.Size == 32 && h2.Bots == 24 && h2.ModVersion == "1.0" && h2.Key == h3.Key, "beacon v2 fields, one entry per PC");
+            Check(string.IsNullOrEmpty(h2.Fp), "beacon without fingerprint (older manager)");
+            LanHost h4 = Lan.Parse(Lan.Payload("S", 16567, "bf2all64", "karkand", 3, 64, "coop", true) + "|abc123|32|24|1.0|0123456789abcdef", System.Net.IPAddress.Parse("10.0.0.5"));
+            Check(h4.Fp == "0123456789abcdef" && h4.ModVersion == "1.0", "beacon v3 fingerprint");
+            // Prüfsumme: unabhängig von Reihenfolge und Groß-/Kleinschreibung, empfindlich für Inhalt
+            List<FileEntry> f1 = new List<FileEntry>(), f2 = new List<FileEntry>(), f3 = new List<FileEntry>();
+            f1.Add(E("a.txt", 1, "AA")); f1.Add(E("Levels\\b.zip", 2, "bb"));
+            f2.Add(E("levels/B.zip", 2, "BB")); f2.Add(E("A.TXT", 1, "aa"));
+            f3.Add(E("a.txt", 1, "aa")); f3.Add(E("levels\\b.zip", 2, "bc"));
+            Check(Lan.Fingerprint(f1) == Lan.Fingerprint(f2) && Lan.Fingerprint(f1) != Lan.Fingerprint(f3) && Lan.Fingerprint(f1).Length == 16, "fingerprint stable and content-sensitive");
+            // Spaß-Aufsatz: Rezept lesen, ungültige Basis ablehnen
+            Check(FunMods.BaseFromRecipe("# x\r\nBase=bf2all64\r\nC4Mags=99\r\n") == "bf2all64", "recipe base");
+            Check(FunMods.BaseFromRecipe("Base=..\\bf2") == null && FunMods.BaseFromRecipe("Base=a/b") == null && FunMods.BaseFromRecipe("C4Mags=1") == null, "recipe rejects bad base");
+            // Aufsatz-Ordner: Verknüpfung zum Basis-Mod zählt nicht zum Manifest; Link legt fehlende Verknüpfungen an
+            string game = Path.Combine(_tmp, "game"), bmod = Path.Combine(game, "mods", "basemod"), fmod = Path.Combine(game, "mods", "basemod_fun");
+            Directory.CreateDirectory(Path.Combine(bmod, "levels")); Directory.CreateDirectory(Path.Combine(bmod, "menu"));
+            File.WriteAllText(Path.Combine(bmod, "levels", "l.txt"), "level"); File.WriteAllText(Path.Combine(bmod, "mod.desc"), "base");
+            Directory.CreateDirectory(fmod); File.WriteAllText(Path.Combine(fmod, FunMods.RecipeFile), "Base=basemod\r\n"); File.WriteAllText(Path.Combine(fmod, "fun_objects.zip"), "zip");
+            int links = FunMods.Link(game, "basemod_fun");
+            Check(links == 2 && File.Exists(Path.Combine(fmod, "levels", "l.txt")) && FunMods.Link(game, "basemod_fun") == 0, "fun pack links base folders once");
+            List<FileEntry> fm = Lan.BuildManifest(fmod, null, null);
+            Check(fm.Count == 2, "manifest skips linked folders");
+            string fp = ModPrints.Compute(game, "basemod_fun");
+            Check(fp.Contains("+") && fp.EndsWith(Lan.Fingerprint(Lan.BuildManifest(bmod, null, null))), "fun pack fingerprint includes base mod");
+            Check(ModPrints.Compute(game, "nomod") == "" && FunMods.BaseOf(game, "basemod") == null, "fingerprint of missing mod, plain mod has no base");
+            List<int> steps = new List<int>();
+            string fp2 = ModPrints.Compute(game, "basemod_fun", delegate (int pc) { steps.Add(pc); });
+            bool rising = steps.Count > 0; for (int i = 1; i < steps.Count; i++) if (steps[i] < steps[i - 1]) rising = false;
+            Check(fp2 == fp && rising && steps[steps.Count - 1] == 100, "fingerprint progress rises to 100 %");
+            int bp; double bs;
+            Check(!ModPrints.Busy(game, "basemod_fun", out bp, out bs), "no fingerprint job running");
+            foreach (string d in Directory.GetDirectories(fmod)) Directory.Delete(d);   // nur die Verknüpfungen entfernen, nicht den Inhalt des Basis-Mods
+            Check(File.Exists(Path.Combine(bmod, "levels", "l.txt")), "removing links keeps base files");
+        }
+
+        static void FunTests()
+        {
+            string tw = "ObjectTemplate.activeSafe GenericFireArm c4_explosives\r\nObjectTemplate.ammo.magSize 1\r\nObjectTemplate.create GenericProjectile c4_explosives_Projectile\r\nObjectTemplate.detonation.explosionForce 17\r\nObjectTemplate.ammo.magSize 3\r\n";
+            string r = FunPack.SetInTemplate(tw, "c4_explosives", "ammo.nrOfMags", "99", "ammo.magSize");
+            Check(r.Contains("magSize 1\r\nObjectTemplate.ammo.nrOfMags 99\r\nObjectTemplate.create") && r.IndexOf("nrOfMags") == r.LastIndexOf("nrOfMags"), "fun: value inserted only in its own template");
+            r = FunPack.SetInTemplate(r, "c4_explosives", "ammo.nrOfMags", "15", "ammo.magSize");
+            Check(r.Contains("nrOfMags 15") && !r.Contains("nrOfMags 99"), "fun: existing value replaced");
+            Check(FunPack.SetInTemplate(tw, "c4_explosives_Projectile", "detonation.explosionForce", "300", null).Contains("explosionForce 300"), "fun: projectile value set");
+            Check(FunPack.SetInTemplate(tw, "c4_explosives", "detonation.explosionForce", "300", null) == tw, "fun: other template untouched");
+            Check(FunPack.SetInTemplate(tw, "missing", "x", "1", null) == tw, "fun: unknown template unchanged");
+            string def = "Material.active 24\r\nMaterial.type 4\r\nMaterial.active 1\r\nMaterial.type 0\r\nMaterial.active 80\r\nMaterial.type 2\r\nMaterial.active 3\r\nMaterial.type 3\r\n";
+            string set = "MaterialManager.createCell 24 1\r\nMaterialManager.damageMod 0.33\r\nMaterialManager.createCell 80 24\r\nMaterialManager.damageMod 1\r\nMaterialManager.createCell 24 3\r\nMaterialManager.damageMod 0.5\r\n";
+            int nf, nb; FunOptions o = new FunOptions(); o.BlastSoldierPct = 2;
+            string m = FunPack.PatchMaterials(set, def, o, out nf, out nb);
+            Check(nf == 1 && nb == 1 && m.Contains("createCell 24 1\r\nMaterialManager.damageMod 0\r\n") && m.Contains("damageMod 0.02") && m.Contains("damageMod 0.5"), "fun: fall and blast damage cells, vehicles untouched");
+            o.NoFallDamage = false; o.BlastSoldierPct = 100;
+            FunPack.PatchMaterials(set, def, o, out nf, out nb);
+            Check(nf == 0 && nb == 0, "fun: nothing changed when switched off");
+            FunOptions o2 = new FunOptions(); o2.C4Mags = 7; o2.EndlessSprint = false; o2.GravityPct = 40;
+            FunOptions back = FunOptions.FromDict(o2.ToDict());
+            Check(back.C4Mags == 7 && !back.EndlessSprint && back.GravityPct == 40 && back.RocketJump, "fun: options roundtrip through recipe");
+            Check(FunOptions.FromDict(FunMods.ParseRecipe("Base=x\r\nC4Mags=abc\r\n")).C4Mags == new FunOptions().C4Mags, "fun: bad recipe values keep defaults");
         }
 
         static FileEntry E(string rel, long size, string hash) { FileEntry e = new FileEntry(); e.Rel = rel; e.Size = size; e.Hash = hash; return e; }

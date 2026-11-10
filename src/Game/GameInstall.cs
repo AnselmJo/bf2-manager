@@ -27,15 +27,15 @@ using Timer = System.Windows.Forms.Timer;
 [assembly: AssemblyTitle("BF2 Manager")]
 [assembly: AssemblyProduct("BF2 Manager")]
 [assembly: AssemblyDescription("Launcher and server manager for Battlefield 2 LAN parties with bots")]
-[assembly: AssemblyVersion("1.3.0.0")]
-[assembly: AssemblyFileVersion("1.3.0.0")]
+[assembly: AssemblyVersion("1.4.0.0")]
+[assembly: AssemblyFileVersion("1.4.0.0")]
 
 namespace BF2Coop
 {
     public static class AppInfo
     {
         public const string Name = "BF2 Manager";
-        public const string Version = "1.3.0";
+        public const string Version = "1.4.0";
         public const int ModuleVersion = 6;
         public const string Repo = "AnselmJo/bf2-manager";
         public const string RepoUrl = "https://github.com/" + Repo;

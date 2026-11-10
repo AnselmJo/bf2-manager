@@ -61,6 +61,7 @@ namespace BF2Coop
             _srvCards.Insert(0, _cStandard); _srvCards.Insert(0, _cBehavior);
             _srvHost.Canvas.Controls.Add(_cBehavior); _srvHost.Canvas.Controls.Add(_cStandard);
             HookCollapse(_cBehavior, _srvHost, _srvCards, 2); HookCollapse(_cStandard, _srvHost, _srvCards, 2);
+            BuildFunCard();
 
             // Hinweisleisten: Konfiguration (Server läuft / Absturz) und Live (reagiert nicht)
             _cfgBanner = new Banner();

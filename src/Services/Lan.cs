@@ -29,6 +29,8 @@ namespace BF2Coop
     public class LanHost
     {
         public string Ip, Name, Mod, Map, Version, Mode, Id, ModVersion;
+        // Prüfsumme über alle Mod-Dateien (leer bei älteren Managern oder solange sie noch berechnet wird)
+        public string Fp;
         public int GamePort, Humans, Max, HttpPort, Size, Bots;
         public bool Running, Self;
         public DateTime Seen;
@@ -117,6 +119,7 @@ namespace BF2Coop
             h.Ip = from.ToString(); h.Name = p[1]; h.GamePort = Util.ToInt(p[2], 16567); h.Mod = p[3]; h.Map = p[4];
             h.Humans = Util.ToInt(p[5], 0); h.Max = Util.ToInt(p[6], 0); h.HttpPort = Util.ToInt(p[7], HttpPort); h.Version = p[8]; h.Mode = p[9]; h.Running = p[10] == "1";
             if (p.Length >= 15) { h.Id = p[11]; h.Size = Util.ToInt(p[12], 0); h.Bots = Util.ToInt(p[13], 0); h.ModVersion = p[14]; }
+            if (p.Length >= 16) h.Fp = p[15];
             h.Seen = DateTime.Now;
             foreach (IPAddress a in LocalAddresses()) if (a.Equals(from)) h.Self = true;
             return h;
@@ -139,7 +142,7 @@ namespace BF2Coop
             foreach (string l in Util.ReadLines(cacheFile)) { int i = l.LastIndexOf('|'); if (i > 0) cache[l.Substring(0, i)] = l.Substring(i + 1); }
             List<FileEntry> r = new List<FileEntry>();
             if (!Directory.Exists(modRoot)) return r;
-            string[] files = Directory.GetFiles(modRoot, "*", SearchOption.AllDirectories);
+            string[] files = ListFiles(modRoot).ToArray();
             Array.Sort(files, StringComparer.OrdinalIgnoreCase);
             List<string> newCache = new List<string>();
             int n = 0;
@@ -162,6 +165,31 @@ namespace BF2Coop
             }
             try { Directory.CreateDirectory(AppPaths.Cache); File.WriteAllLines(cacheFile, newCache.ToArray(), Encoding.UTF8); } catch { }
             return r;
+        }
+
+        // Alle Dateien unterhalb von root; verknüpfte Ordner (Junctions eines Spaß-Aufsatzes) zählen nicht dazu
+        public static List<string> ListFiles(string root)
+        {
+            List<string> r = new List<string>();
+            Stack<string> dirs = new Stack<string>(); dirs.Push(root);
+            while (dirs.Count > 0)
+            {
+                string d = dirs.Pop();
+                r.AddRange(Directory.GetFiles(d));
+                foreach (string sub in Directory.GetDirectories(d))
+                    if ((File.GetAttributes(sub) & FileAttributes.ReparsePoint) == 0) dirs.Push(sub);
+            }
+            return r;
+        }
+
+        // Kurze Prüfsumme über das Manifest: gleich = gleiche Dateien mit gleichem Inhalt
+        public static string Fingerprint(List<FileEntry> m)
+        {
+            List<FileEntry> s = new List<FileEntry>(m);
+            s.Sort(delegate (FileEntry a, FileEntry b) { return string.Compare(a.Rel, b.Rel, StringComparison.OrdinalIgnoreCase); });
+            StringBuilder sb = new StringBuilder();
+            foreach (FileEntry e in s) sb.Append(e.Rel.ToLowerInvariant().Replace('/', '\\')).Append('|').Append(e.Size).Append('|').Append(e.Hash.ToLowerInvariant()).Append('\n');
+            using (SHA1 sha = SHA1.Create()) return Updater.Hex(sha.ComputeHash(Encoding.UTF8.GetBytes(sb.ToString()))).Substring(0, 16).ToLowerInvariant();
         }
 
         public static string ManifestText(List<FileEntry> m)
@@ -310,13 +338,15 @@ namespace BF2Coop
         readonly object _lock = new object();
         public string Error;
 
-        public LanFileServer(string gameDir) { _gameDir = gameDir; }
+        readonly int _port;
+        public LanFileServer(string gameDir) : this(gameDir, Lan.HttpPort) { }
+        public LanFileServer(string gameDir, int port) { _gameDir = gameDir; _port = port; }
 
         public void Start()
         {
             try
             {
-                _tcp = new TcpListener(IPAddress.Any, Lan.HttpPort);
+                _tcp = new TcpListener(IPAddress.Any, _port);
                 _tcp.Start();
                 _th = new Thread(Loop); _th.IsBackground = true; _th.Start();
             }

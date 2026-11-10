@@ -226,6 +226,7 @@ namespace BF2Coop
             LoadAll();
             WarnModule();
             Toast((_coop ? "Coop" : "Conquest") + " · " + _mod, ToastKind.Info);
+            UpdateFunCard();
         }
     }
 }
