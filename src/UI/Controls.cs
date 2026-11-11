@@ -1320,6 +1320,10 @@ namespace BF2Coop
             BackColor = Theme.Card; Font = Theme.Body; KeyPreview = true;
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
             int w = Dpi.D(460), pad = Dpi.D(24);
+            // Breit genug für alle Knöpfe (sonst rutscht der erste links aus dem Fenster)
+            int bw = 0;
+            foreach (string s in buttons) { FlatButton probe = new FlatButton(s, null, BtnKind.Secondary); bw += Math.Max(Dpi.D(96), probe.Width) + Dpi.D(10); probe.Dispose(); }
+            w = Math.Max(w, bw - Dpi.D(10) + 2 * pad);
             int mh = Theme.Measure(msg, Theme.Body, w - 2 * pad).Height;
             int y = Dpi.D(62) + mh + Dpi.D(16);
             if (input != null)

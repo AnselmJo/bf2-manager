@@ -320,6 +320,11 @@ namespace BF2Coop.Tests
             LanHost h3 = Lan.Parse(Lan.Payload("S", 16567, "bf2all64", "karkand", 3, 64, "coop", true) + "|abc123|32|24|1.0", System.Net.IPAddress.Parse("10.0.0.6"));
             Check(h2.Size == 32 && h2.Bots == 24 && h2.ModVersion == "1.0" && h2.Key == h3.Key, "beacon v2 fields, one entry per PC");
             Check(string.IsNullOrEmpty(h2.Fp), "beacon without fingerprint (older manager)");
+            LanHost h5 = Lan.Parse(Lan.Payload("S", 16567, "bf2all64", "karkand", 3, 64, "coop", true) + "|abc123|32|24|1.0|fp|a1b2|Neue Runde: Karkand.|bf2all64_fun", System.Net.IPAddress.Parse("10.0.0.5"));
+            Check(h5.AnnId == "a1b2" && h5.AnnText == "Neue Runde: Karkand." && h5.NextMod == "bf2all64_fun" && h2.AnnId == "", "beacon v4: announcement and next mod");
+            FunOptions fo = new FunOptions(); fo.WaterKills = true; fo.WeaponRule = 5;
+            string desc = FunPack.Describe(fo);
+            Check(desc.Length > 10 && (desc.Contains("Scharfsch") || desc.Contains("Sniper")) && (desc.Contains("Wasser") || desc.Contains("water")), "fun: rules described for the announcement");
             LanHost h4 = Lan.Parse(Lan.Payload("S", 16567, "bf2all64", "karkand", 3, 64, "coop", true) + "|abc123|32|24|1.0|0123456789abcdef", System.Net.IPAddress.Parse("10.0.0.5"));
             Check(h4.Fp == "0123456789abcdef" && h4.ModVersion == "1.0", "beacon v3 fingerprint");
             // Prüfsumme: unabhängig von Reihenfolge und Groß-/Kleinschreibung, empfindlich für Inhalt
@@ -343,6 +348,13 @@ namespace BF2Coop.Tests
             string fp = ModPrints.Compute(game, "basemod_fun");
             Check(fp.Contains("+") && fp.EndsWith(Lan.Fingerprint(Lan.BuildManifest(bmod, null, null))), "fun pack fingerprint includes base mod");
             Check(ModPrints.Compute(game, "nomod") == "" && FunMods.BaseOf(game, "basemod") == null, "fingerprint of missing mod, plain mod has no base");
+            Check(ModSync.Transient(new System.Net.WebException("t", System.Net.WebExceptionStatus.Timeout)) && ModSync.Transient(new IOException("x"))
+                && !ModSync.Transient(new System.Net.WebException("p", System.Net.WebExceptionStatus.ProtocolError)) && !ModSync.Transient(new Exception("x")), "sync: only network hiccups are retried");
+            // Gemeinsamer Manifest-Speicher: erste Abfrage startet die Prüfung im Hintergrund, danach kommt die Liste
+            int mp; List<FileEntry> first = ManifestStore.TryGet(bmod, out mp);
+            List<FileEntry> got = ManifestStore.Get(bmod, null);
+            List<FileEntry> again = ManifestStore.TryGet(bmod, out mp);
+            Check(got.Count == 2 && again != null && again.Count == 2, "manifest store: background build, then served from memory");
             List<int> steps = new List<int>();
             string fp2 = ModPrints.Compute(game, "basemod_fun", delegate (int pc) { steps.Add(pc); });
             bool rising = steps.Count > 0; for (int i = 1; i < steps.Count; i++) if (steps[i] < steps[i - 1]) rising = false;
@@ -393,16 +405,67 @@ namespace BF2Coop.Tests
             Dictionary<string, object> pre = new Dictionary<string, object>();
             pre["Vals"] = new Dictionary<string, string>();
             Check(PresetFile.Summary(pre) == "Einstellungen, Bots" || PresetFile.Summary(pre) == "settings, bots", "preset summary: settings only");
-            pre["Mod"] = "bf2all64"; pre["Type"] = "coop"; pre["Maps"] = new List<string> { "a gpm_coop 16", "b gpm_coop 32" }; pre["Fun"] = new Dictionary<string, string>();
+            pre["Mod"] = "bf2all64"; pre["Type"] = "coop"; pre["Maps"] = new List<string> { "a gpm_coop 16", "b gpm_coop 32" }; pre["MapFun"] = new List<string> { "C4Force=400", "" };
             string ps = PresetFile.Summary(pre);
-            Check(ps.Contains("bf2all64 · Coop · 2 Maps") && (ps.Contains("Spaßrunde") || ps.Contains("fun round")), "preset summary: rotation and fun round");
+            Check(ps.Contains("bf2all64 · Coop · 2 Maps") && (ps.Contains("Spaßregeln auf 1 Maps") || ps.Contains("fun rules on 1 Maps")), "preset summary: rotation and fun rules per map");
             string pf = Path.Combine(_tmp, "presets", "x.json");
             PresetFile.Write(pf, pre);
             Dictionary<string, object> back2 = PresetFile.Read(pf);
             Check(Convert.ToString(back2["Mod"]) == "bf2all64" && PresetFile.Summary(back2) == ps && !File.Exists(pf + ".part"), "preset file roundtrip");
-            FunOptions o2 = new FunOptions(); o2.C4Mags = 7; o2.EndlessSprint = false; o2.GravityPct = 40;
+            FunOptions o2 = new FunOptions(); o2.C4Mags = 7; o2.EndlessSprint = false; o2.GravityPct = 40; o2.C4Sniper = false; o2.WeaponRule = 5;
             FunOptions back = FunOptions.FromDict(o2.ToDict());
-            Check(back.C4Mags == 7 && !back.EndlessSprint && back.GravityPct == 40 && back.RocketJump, "fun: options roundtrip through recipe");
+            Check(back.C4Mags == 7 && !back.EndlessSprint && back.GravityPct == 40 && !back.C4Sniper && back.C4Engineer && back.WeaponRule == 5, "fun: options roundtrip through recipe");
+            // Regeln pro Map: neutral = normales Spiel, gleicher Regelsatz = gleicher Aufsatz-Name
+            FunOptions nz = FunOptions.Neutral();
+            Check(nz.IsNeutral() && !new FunOptions().IsNeutral(), "map rules: neutral means normal game");
+            FunOptions c4a = FunOptions.Neutral(); c4a.WeaponRule = 3; c4a.C4Force = 400;
+            FunOptions c4b = FunOptions.FromDict(c4a.ToDict());
+            Check(FunPack.PackName("bf2all64", c4a) == FunPack.PackName("bf2all64", c4b) && FunPack.PackName("bf2all64", c4a) != FunPack.PackName("bf2all64", nz)
+                && System.Text.RegularExpressions.Regex.IsMatch(FunPack.PackName("bf2all64", c4a), "^fun_[0-9a-f]{6}$") && FunPack.PackName("bf2all64", c4a).Length <= FunPack.MaxModName
+                && FunPack.PackName("bf2sf64", c4a) != FunPack.PackName("bf2all64", c4a), "map rules: short stable pack name per mod and rule set (BF2 rejects long mod names)");
+            List<MapEntry> rot = new List<MapEntry> { MapEntry.Make("karkand", "gpm_coop", 16), MapEntry.Make("dalian", "gpm_coop", 32), MapEntry.Make("karkand", "gpm_coop", 16) };
+            rot[2].Fun = c4a.ToDict();
+            string rf = Path.Combine(_tmp, "rules", MapRules.FileName);
+            MapRules.Save(rf, rot);
+            List<MapEntry> rot2 = new List<MapEntry> { MapEntry.Make("karkand", "gpm_coop", 16), MapEntry.Make("dalian", "gpm_coop", 32), MapEntry.Make("karkand", "gpm_coop", 16) };
+            MapRules.Apply(rf, rot2);
+            Check(rot2[0].Fun == null && rot2[1].Fun == null && rot2[2].Fun != null && FunOptions.FromDict(rot2[2].Fun).C4Force == 400, "map rules: same map twice keeps its own rules (by position)");
+            List<MapEntry> rot3 = new List<MapEntry> { MapEntry.Make("dalian", "gpm_coop", 32), MapEntry.Make("karkand", "gpm_coop", 16) };
+            MapRules.Apply(rf, rot3);
+            Check(rot3[1].Fun != null && rot3[0].Fun == null, "map rules: moved map finds its rules by name");
+            rot2[2].Fun = null; MapRules.Save(rf, rot2);
+            Check(!File.Exists(rf), "map rules: file removed when no map has rules");
+            MapEntry cl = rot[2].Clone(); cl.Fun["C4Force"] = "1";
+            Check(rot[2].Fun["C4Force"] == "400", "map rules: clone does not share rules");
+            // Ohne Fahrzeuge: nur Spawner-Zeilen fahrbarer Fahrzeuge fallen weg
+            HashSet<string> known = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "usapc_lav25" };
+            string gpo = "ObjectTemplate.create ObjectSpawner A\r\nObjectTemplate.setObjectTemplate 2 USTNK_M1A2\r\nObjectTemplate.minSpawnDelay 30\r\nObjectTemplate.create ObjectSpawner B\r\nObjectTemplate.setObjectTemplate 1 us_bipod\r\nObjectTemplate.create ObjectSpawner C\r\nObjectTemplate.setObjectTemplate 1 usapc_lav25\r\nObjectTemplate.setObjectTemplate 2 JEP_NANJING\r\nObjectTemplate.create ObjectSpawner D\r\nObjectTemplate.setObjectTemplate 1 USART_LW155\r\n";
+            int rv; string g2 = FunPack.RemoveVehicleSpawns(gpo, known, out rv);
+            Check(rv == 3 && g2.Contains("us_bipod") && g2.Contains("USART_LW155") && !g2.Contains("USTNK") && !g2.Contains("lav25") && !g2.Contains("NANJING") && g2.Contains("create ObjectSpawner A\r\nObjectTemplate.minSpawnDelay"), "no vehicles: vehicle spawns removed, stationary and artillery stay");
+            Check(FunPack.IsDrivable("ahe_z10", null) && FunPack.IsDrivable("jeep_faav", null) && FunPack.IsDrivable("usair_f18", null) && FunPack.IsDrivable("air_su30mkk", null) && !FunPack.IsDrivable("igla_djigit", null) && !FunPack.IsDrivable("aircontroltower", null) && !FunPack.IsDrivable("mobileradar_us_dest", null) && !FunPack.IsDrivable("us_bipod", null), "no vehicles: name heuristic keeps stationary and commander assets");
+            // Aufsatz mit echtem levels-Ordner: Link füllt die übrigen Maps als Verknüpfung auf
+            string game = Path.Combine(_tmp, "game2"), bmod = Path.Combine(game, "mods", "basemod");
+            Directory.CreateDirectory(Path.Combine(bmod, "menu")); File.WriteAllText(Path.Combine(bmod, "mod.desc"), "base");
+            string lv = Path.Combine(bmod, "levels"); Directory.CreateDirectory(Path.Combine(lv, "map2", "info")); File.WriteAllText(Path.Combine(lv, "map2", "server.zip"), "x");
+            string fl = Path.Combine(game, "mods", "basemod_fun", "levels", "map2"); Directory.CreateDirectory(fl); File.WriteAllText(Path.Combine(game, "mods", "basemod_fun", FunMods.RecipeFile), "Base=basemod\r\n");
+            int nl2 = FunMods.Link(game, "basemod_fun");
+            bool linkedInfo = Directory.Exists(Path.Combine(fl, "info")) && (File.GetAttributes(Path.Combine(fl, "info")) & FileAttributes.ReparsePoint) != 0;
+            Check(nl2 >= 2 && linkedInfo && !File.Exists(Path.Combine(fl, "server.zip")), "links fill a real levels folder one level deeper");
+            FunPack.Remove(game, "basemod_fun");
+            Check(!Directory.Exists(Path.Combine(game, "mods", "basemod_fun")) && File.Exists(Path.Combine(lv, "map2", "server.zip")) && Directory.Exists(Path.Combine(lv, "map2", "info")), "removing a pack never touches the base mod");
+            Dictionary<string, string> legacy = new Dictionary<string, string>(); legacy["C4ForMore"] = "0";
+            FunOptions lo = FunOptions.FromDict(legacy);
+            Check(!lo.C4Engineer && !lo.C4Sniper && !lo.C4AT, "fun: 1.4.1 recipe C4ForMore=0 maps to all three classes off");
+            Check(FunPack.WantsC4("MEC_Engineer.con", back) && !FunPack.WantsC4("Kits/US/US_Sniper.con", back) && FunPack.WantsC4("seal_AT_Special.con", back) && !FunPack.WantsC4("US_Medic.con", back), "fun: C4 per class by kit file name");
+            Check(FunPack.ScaleInTemplate("ObjectTemplate.activeSafe GenericProjectile r\r\nObjectTemplate.detonation.explosionDamage 125\r\n", "r", "detonation.explosionDamage", 0.1).Contains("explosionDamage 12.5"), "fun: blast damage scaled per template");
+            // Waffen-Regel: nur Messer, Fallschirm und die erlaubte Waffe bleiben im Kit-Abschnitt; Freischaltungen fallen weg
+            Dictionary<string, int> sl2 = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            sl2["kni"] = 1; sl2["pis"] = 2; sl2["rif"] = 3; sl2["gren"] = 4; sl2["c4"] = 5; sl2["para"] = 9;
+            string kt = "ObjectTemplate.create Kit K\r\nObjectTemplate.addTemplate pis\r\nObjectTemplate.addTemplate gren\r\nObjectTemplate.addTemplate c4\r\nObjectTemplate.addTemplate kni\r\nObjectTemplate.addTemplate UnlockK\r\nObjectTemplate.addTemplate rif\r\nObjectTemplate.addTemplate para\r\nObjectTemplate.createComponent VehicleHud\r\nObjectTemplate.create ItemContainer UnlockK\r\nObjectTemplate.addTemplate rif2\r\n";
+            string onlyPistol = FunPack.RestrictKit(kt, "K", sl2, true, null);
+            Check(onlyPistol.Contains("addTemplate pis\r\n") && onlyPistol.Contains("addTemplate kni\r\n") && onlyPistol.Contains("addTemplate para\r\n") && !onlyPistol.Contains("addTemplate gren") && !onlyPistol.Contains("addTemplate UnlockK") && !onlyPistol.Contains("addTemplate rif\r\n") && onlyPistol.Contains("addTemplate rif2"), "fun rule: pistol only, unlock container untouched but unused");
+            string onlySniper = FunPack.RestrictKit(kt, "K", sl2, false, "sniperrifle");
+            Check(onlySniper.Contains("addTemplate sniperrifle") && !onlySniper.Contains("addTemplate pis\r\n") && onlySniper.Contains("VehicleHud"), "fun rule: weapon added, rest of kit kept");
             Check(FunOptions.FromDict(FunMods.ParseRecipe("Base=x\r\nC4Mags=abc\r\n")).C4Mags == new FunOptions().C4Mags, "fun: bad recipe values keep defaults");
         }
 

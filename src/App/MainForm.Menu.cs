@@ -62,6 +62,15 @@ namespace BF2Coop
                 List<string> maps = new List<string>();
                 foreach (MapEntry m in _st.Maps) maps.Add(m.Name + " " + m.Mode + " " + m.Size + (m.Opt != null ? " " + m.Opt.ToTokens() : ""));
                 d["Maps"] = maps;
+                // Spaßregeln pro Map, gleiche Reihenfolge wie Maps ("" = normale Regeln)
+                List<string> fun = new List<string>();
+                foreach (MapEntry m in _st.Maps)
+                {
+                    List<string> kv = new List<string>();
+                    if (m.Fun != null) foreach (KeyValuePair<string, string> p in m.Fun) kv.Add(p.Key + "=" + p.Value);
+                    fun.Add(string.Join(";", kv.ToArray()));
+                }
+                d["MapFun"] = fun;
             }
             return d;
         }
@@ -99,6 +108,11 @@ namespace BF2Coop
                         if (m.Mode == ModeName && (_avail.Count == 0 || _availIx.ContainsKey(m.Key))) maps.Add(m);
                     }
                     _st.Maps = maps;
+                    if (d.TryGetValue("MapFun", out o) && o is System.Collections.IEnumerable)
+                    {
+                        int i = 0;
+                        foreach (object x in (System.Collections.IEnumerable)o) { string s = Convert.ToString(x); if (i < maps.Count && s.Length > 0) maps[i].Fun = MapRules.Parse(s); i++; }
+                    }
                 }
                 _applying = false;
                 UpdateHumans();

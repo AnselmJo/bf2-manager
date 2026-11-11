@@ -1,4 +1,4 @@
-// Hauptfenster: Abend-Funktionen (Bestenliste, geplante Nachrichten, Wächter) - BF2 Manager. C# 5.
+﻿// Hauptfenster: Abend-Funktionen (Bestenliste, geplante Nachrichten, Wächter) - BF2 Manager. C# 5.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -170,7 +170,7 @@ namespace BF2Coop
             _wdRestarts.Add(DateTime.Now);
             Util.Log(AppPaths.Dir, "Watchdog: server stopped unexpectedly, restarting (" + _wdRestarts.Count + ")");
             Toast((known ? _srvExit + " " : "") + T("Wächter startet ihn neu …", "Watchdog is restarting it …"), ToastKind.Warn);
-            StartServerProcess();
+            RestartCurrent();
         }
     }
 }

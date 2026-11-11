@@ -1,4 +1,4 @@
-﻿# User guide
+# User guide
 
 Switch between **Play** and **Host** at the top left. Every setting has an **ⓘ** with an explanation, the default and when a change applies. Everything is saved automatically.
 
@@ -46,7 +46,9 @@ While the server runs, **Server** shows the **live view**: players (kick), curre
 
 **Options** – every server setting. Cards *Server behaviour* (automatic restart after a crash or hang, server unlocks, LAN service) and *Default and presets* (use current values as your default for all mods, reset to default, factory settings; any number of named presets – settings and bots always, rotation with mod and mode and the fun round optionally – to load, overwrite, rename or delete). While the server runs: ⚡ values apply immediately, the bar shows how many changes need a restart and offers **Restart now**.
 
-**Fun round** (Options › *Advanced*) – for the odd party round. **Create and use** builds a small mod `<mod>_fun` next to the selected mod (its folders are links to the base mod, which stays unchanged) and selects it; then (re)start the server. Rules: C4 per player and force (C4 trampoline), blast damage to soldiers, no fall damage, Spec Ops explosives on their own keys (5 C4, 6 jump claymore, 7 mega mine), C4 for engineer, sniper and anti-tank, rocket jump with adjustable force, rocket speed, count and reload time (ms), vehicle turbo (engine power in %), soldier health in %, water is deadly, explosive sniper, grenade jump, 99 magazines for all hand weapons, sprint without stamina, gravity (60 % = high jumps, applies to everything). Players get the pack automatically when they press **Join** (a few KB). **Back to base mod** returns to the normal mod, **Remove** deletes the pack.
+**Fun rules per map** (Server page) – select a map in the rotation; under *Bot values* the *Fun rules* card has *Custom rules*. Switch on, pick a quick preset (C4 only, rocket chaos, sniper duel, floor is lava, all the fun) or change single values: C4 count/force/damage, extra explosives for Spec Ops, C4 per class, rocket force/damage/speed/count/reload, vehicle turbo, soldier health, water is deadly, explosive sniper, grenade force/damage, endless ammo and sprint, gravity, weapon rule (knife, pistol, C4, rocket launcher, sniper, shotgun, machine gun, grenades or defibrillator only). The server restarts briefly (about 20 s) only when the next map needs other rules; players with *Join automatically* are back in by themselves. Changes while running apply from the next map.
+
+**Order** (bar above the rotation) – mods in play order. *Then play another mod* appends a mod; after the rotation of one mod the server restarts with the next. Click a mod to edit its rotation, right-click to move or remove it.
 
 ## When do changes apply?
 

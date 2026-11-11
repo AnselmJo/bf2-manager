@@ -17,11 +17,11 @@ namespace BF2Coop
         public bool NoFallDamage = true;
         public int BlastSoldierPct = 2;         // Schaden von C4 und Spaß-Explosionen an Soldaten in % (Original 100)
         public bool ExtraExplosives = true;     // Spec Ops: zusätzlich Sprung-Claymore (Taste 6) und Mega-Mine (Taste 7)
-        public bool C4ForMore = true;           // C4 auch für Pionier, Scharfschütze und Panzerabwehr (Taste 5)
+        public bool C4Engineer = true, C4Sniper = true, C4AT = true;   // C4 auch für diese Klassen (Taste 5, wo frei)
         public int MineForce = 2500;            // Panzermine: wirft Fahrzeuge (Original 10)
         public int ClaymoreForce = 300;         // Claymore: Sprungfalle für Soldaten (Original 7)
-        public bool RocketJump = true;          // Panzerfaust-Explosion schiebt stark, verletzt Soldaten kaum (Volltreffer zählt weiter)
-        public int RocketForce = 250;           // (Original 7)
+        public int RocketForce = 250;           // Wucht der Raketen-Explosion (0 = unverändert, Original 7)
+        public int RocketDamagePct = 5;         // Explosionsschaden der Rakete in % (100 = normal); Volltreffer zählen unverändert
         public int RocketSpeedPct = 25;         // Raketen-Höchsttempo in % (100 = normal; klein = ausweichbar)
         public int RocketMags = 50;             // Raketen pro Spieler (Original 5–6)
         public int RocketReloadMs = 300;        // Nachladezeit der Panzerfaust in ms (0 = unverändert, Original 3000)
@@ -31,10 +31,13 @@ namespace BF2Coop
         public int VehiclePowerPct = 200;       // Motorkraft der Landfahrzeuge in % (100 = normal) – „Turbo“
         public bool WaterKills = false;         // Soldaten sterben bei Berührung mit Wasser („Der Boden ist Lava“)
         public int SniperForce = 300;           // Explosiv-Sniper: Einschlag schleudert (0 = aus); Treffer zählen weiter normal
-        public int GrenadeForce = 0;            // Granaten-Sprung: Wucht der Handgranaten, verletzen dann kaum (0 = aus, Original 5)
+        public int GrenadeForce = 250;          // Wucht der Handgranaten (0 = unverändert, Original 5)
+        public int GrenadeDamagePct = 10;       // Explosionsschaden der Handgranaten in % (100 = normal; klein = Granaten-Sprung)
+        public int WeaponRule = 0;              // 0 alle, 1 Messer, 2 Pistole, 3 C4, 4 Panzerfaust, 5 Scharfschütze, 6 Schrotflinte, 7 MG, 8 Handgranaten, 9 Defibrillator
         public int HealthPct = 100;             // Lebenspunkte aller Soldaten (auch Bots) in % (100 = normal)
+        public bool NoVehicles = false;         // Map ohne Fahrzeuge (das Bot-Modul räumt Panzer, Jeeps, Helis, Jets, Boote weg)
 
-        static readonly string[] Keys = { "HealthPct", "C4Mags", "C4Force", "NoFallDamage", "BlastSoldierPct", "ExtraExplosives", "C4ForMore", "MineForce", "ClaymoreForce", "RocketJump", "RocketForce", "RocketSpeedPct", "RocketMags", "RocketReloadMs", "EndlessAmmo", "EndlessSprint", "GravityPct", "VehiclePowerPct", "WaterKills", "SniperForce", "GrenadeForce" };
+        static readonly string[] Keys = { "HealthPct", "C4Mags", "C4Force", "NoFallDamage", "BlastSoldierPct", "ExtraExplosives", "C4Engineer", "C4Sniper", "C4AT", "MineForce", "ClaymoreForce", "RocketForce", "RocketDamagePct", "RocketSpeedPct", "RocketMags", "RocketReloadMs", "EndlessAmmo", "EndlessSprint", "GravityPct", "VehiclePowerPct", "WaterKills", "SniperForce", "GrenadeForce", "GrenadeDamagePct", "WeaponRule", "NoVehicles" };
 
         public Dictionary<string, string> ToDict()
         {
@@ -47,6 +50,35 @@ namespace BF2Coop
             return d;
         }
 
+        // Alles wie im normalen Spiel – Grundlage für Regeln pro Map (man ändert nur, was man will)
+        public static FunOptions Neutral()
+        {
+            FunOptions o = new FunOptions();
+            o.C4Mags = 0; o.C4Force = 0; o.NoFallDamage = false; o.BlastSoldierPct = 100; o.ExtraExplosives = false;
+            o.C4Engineer = o.C4Sniper = o.C4AT = false; o.RocketForce = 0; o.RocketDamagePct = 100; o.RocketSpeedPct = 100;
+            o.RocketMags = 0; o.RocketReloadMs = 0; o.EndlessAmmo = false; o.EndlessSprint = false; o.GravityPct = 100;
+            o.VehiclePowerPct = 100; o.WaterKills = false; o.SniperForce = 0; o.GrenadeForce = 0; o.GrenadeDamagePct = 100;
+            o.WeaponRule = 0; o.HealthPct = 100; o.NoVehicles = false;
+            return o;
+        }
+
+        public bool IsNeutral()
+        {
+            Dictionary<string, string> a = ToDict(), b = Neutral().ToDict();
+            foreach (KeyValuePair<string, string> kv in a) if (b[kv.Key] != kv.Value) return false;
+            return true;
+        }
+
+        // Kurzer, stabiler Name für diesen Regelsatz (gleiche Regeln = gleicher Aufsatz)
+        public string Hash()
+        {
+            List<string> keys = new List<string>(Keys); keys.Sort(StringComparer.Ordinal);
+            StringBuilder sb = new StringBuilder(); Dictionary<string, string> d = ToDict();
+            foreach (string k in keys) sb.Append(k).Append('=').Append(d[k]).Append(';');
+            using (System.Security.Cryptography.SHA1 sha = System.Security.Cryptography.SHA1.Create())
+                return Updater.Hex(sha.ComputeHash(Encoding.UTF8.GetBytes(sb.ToString()))).Substring(0, 6).ToLowerInvariant();
+        }
+
         public static FunOptions FromDict(Dictionary<string, string> d)
         {
             FunOptions o = new FunOptions();
@@ -57,6 +89,8 @@ namespace BF2Coop
                 if (f.FieldType == typeof(bool)) f.SetValue(o, s == "1" || s.Equals("true", StringComparison.OrdinalIgnoreCase));
                 else { int i; if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out i)) f.SetValue(o, i); }
             }
+            // Ältere Rezepte (1.4.1): ein Schalter für alle Klassen
+            string old; if (d != null && d.TryGetValue("C4ForMore", out old) && !d.ContainsKey("C4Engineer")) o.C4Engineer = o.C4Sniper = o.C4AT = old == "1";
             return o;
         }
     }
@@ -71,6 +105,48 @@ namespace BF2Coop
         static readonly string[] Rockets = { "at_predator", "eryx" };
 
         public static string NameFor(string baseMod) { return baseMod + "_fun"; }
+
+        // Aufsatz für einen Regelsatz pro Map: fun_<6 Zeichen> (aus Basis-Mod und Regeln).
+        // BF2 bricht bei langen Mod-Namen ab („modName to long“, 19 Zeichen); 12 Zeichen gehen sicher.
+        public const int MaxModName = 12;
+        public static string PackName(string baseMod, FunOptions o)
+        {
+            using (System.Security.Cryptography.SHA1 sha = System.Security.Cryptography.SHA1.Create())
+                return "fun_" + Updater.Hex(sha.ComputeHash(Encoding.UTF8.GetBytes(baseMod.ToLowerInvariant() + "|" + o.Hash()))).Substring(0, 6).ToLowerInvariant();
+        }
+
+        // Nicht mehr gebrauchte, automatisch erzeugte Aufsätze eines Basis-Mods löschen (fun_xxxxxx bzw. alte <Basis>_fun_xxxxxx, jeweils mit fun.recipe)
+        public static int Cleanup(string gameDir, string baseMod, ICollection<string> keep)
+        {
+            int n = 0; string mods = Path.Combine(gameDir, "mods");
+            if (!Directory.Exists(mods)) return 0;
+            foreach (string d in Directory.GetDirectories(mods))
+            {
+                string name = Path.GetFileName(d);
+                bool auto = Regex.IsMatch(name, "^fun_[0-9a-f]{6}$", RegexOptions.IgnoreCase) || Regex.IsMatch(name, "^" + Regex.Escape(baseMod) + "_fun_[0-9a-f]{6}$", RegexOptions.IgnoreCase);
+                if (!auto || keep.Contains(name) || !string.Equals(FunMods.BaseOf(gameDir, name), baseMod, StringComparison.OrdinalIgnoreCase)) continue;
+                try { Remove(gameDir, name); n++; } catch { }
+            }
+            return n;
+        }
+
+        // Kurze Ansage der Spaßregeln, z. B. „C4-Trampolin, Raketensprung, Wasser ist tödlich!“
+        public static string Describe(FunOptions o)
+        {
+            List<string> p = new List<string>();
+            string[] rules = { null, I18n.T("Nur Messer!", "Knife only!"), I18n.T("Nur Pistolen!", "Pistols only!"), I18n.T("Nur C4!", "C4 only!"), I18n.T("Nur Panzerfäuste!", "Rocket launchers only!"), I18n.T("Nur Scharfschützen!", "Snipers only!"), I18n.T("Nur Schrotflinten!", "Shotguns only!"), I18n.T("Nur Maschinengewehre!", "Machine guns only!"), I18n.T("Nur Handgranaten!", "Hand grenades only!"), I18n.T("Nur Defibrillatoren!", "Defibrillators only!") };
+            if (o.WeaponRule > 0 && o.WeaponRule < rules.Length) p.Add(rules[o.WeaponRule]);
+            if (o.C4Force >= 100) p.Add(I18n.T("C4-Trampolin", "C4 trampoline"));
+            if (o.RocketForce >= 100) p.Add(I18n.T("Raketensprung", "rocket jump"));
+            if (o.GrenadeForce >= 100 && o.GrenadeDamagePct <= 50) p.Add(I18n.T("Granaten-Sprung", "grenade jump"));
+            if (o.SniperForce > 0) p.Add(I18n.T("Explosiv-Sniper", "explosive sniper"));
+            if (o.NoVehicles) p.Add(I18n.T("ohne Fahrzeuge", "no vehicles"));
+            if (o.WaterKills) p.Add(I18n.T("Wasser ist tödlich", "water is deadly"));
+            if (o.GravityPct > 0 && o.GravityPct < 100) p.Add(o.GravityPct <= 45 ? I18n.T("Mondschwerkraft", "moon gravity") : I18n.T("hohe Sprünge", "high jumps"));
+            if (o.VehiclePowerPct > 100) p.Add(I18n.T("Turbo-Fahrzeuge", "turbo vehicles"));
+            if (o.NoFallDamage) p.Add(I18n.T("kein Fallschaden", "no fall damage"));
+            return string.Join(", ", p.ToArray());
+        }
 
         class Mount { public string Abs, Rel, Root; }
 
@@ -235,6 +311,72 @@ namespace BF2Coop
             return -1;
         }
 
+        // Zahl in einer Vorlage mit Faktor multiplizieren (z. B. Explosionsschaden)
+        public static string ScaleInTemplate(string text, string template, string key, double factor)
+        {
+            string sec = Section(text, template);
+            if (sec == null) return text;
+            Match m = Regex.Match(sec, @"(?mi)^ObjectTemplate\." + Regex.Escape(key) + @"[ \t]+([\d.]+)");
+            return m.Success ? SetInTemplate(text, template, key, F(Num(m.Groups[1].Value) * factor), null) : text;
+        }
+
+        // Soll dieses Kit (Dateiname) laut Einstellungen zusätzlich C4 bekommen?
+        public static bool WantsC4(string kitFile, FunOptions o)
+        {
+            string f = Path.GetFileNameWithoutExtension(kitFile ?? "").ToLowerInvariant();
+            if (f.EndsWith("_special")) f = f.Substring(0, f.Length - 8);
+            return (o.C4Engineer && f.EndsWith("_engineer")) || (o.C4Sniper && f.EndsWith("_sniper")) || (o.C4AT && f.EndsWith("_at"));
+        }
+
+        // Waffen-Regeln ab 6: Erkennung über den Namen der Waffen-Vorlage (alle drei Mods nutzen die BF2-Namensschemata)
+        public static readonly string[] RuleRx = { null, null, null, null, null, null,
+            @"sht_|benelli|remington|saiga|jackhammer|protecta|norinco982",
+            @"lmg|mg36|m249|pkm|rpk|hk21",
+            @"^[a-z]*hgr_(?!smoke)",
+            @"^defibrillator$" };
+
+        // Erste passende Waffe aus einem Kit desselben Fraktionsordners, sonst aus irgendeinem Kit
+        static string PickWeapon(List<KeyValuePair<string, string>> kits, Dictionary<string, int> slot, string folder, Regex rx)
+        {
+            string any = null;
+            foreach (KeyValuePair<string, string> k in kits)
+            {
+                bool same = string.Equals(Path.GetDirectoryName(k.Key.Replace('/', '\\')), folder, StringComparison.OrdinalIgnoreCase);
+                foreach (string it in KitItems(k.Value))
+                {
+                    if (!rx.IsMatch(it) || !slot.ContainsKey(it) || Regex.IsMatch(it, "flash|smoke", RegexOptions.IgnoreCase)) continue;
+                    if (same) return it;
+                    if (any == null) any = it;
+                }
+            }
+            return any;
+        }
+
+        // Kit-Abschnitt auf Messer (Taste 1), Fallschirm (9), wahlweise Pistole (2) und eine zusätzliche Waffe beschränken.
+        // Freischaltungen (ItemContainer) werden nicht mehr eingebunden; ihre Definition bleibt unberührt.
+        public static string RestrictKit(string text, string kit, Dictionary<string, int> slot, bool keepPistol, string add)
+        {
+            Match start = Regex.Match(text, @"(?mi)^ObjectTemplate\.(?:create|activeSafe)[ \t]+Kit[ \t]+" + Regex.Escape(kit) + @"(?=[ \t]*\r?$)");
+            if (!start.Success) return text;
+            string sec = Section(text, kit); int at = text.IndexOf(sec, start.Index, StringComparison.Ordinal);
+            if (sec == null || at < 0) return text;
+            string nl = Nl(text); bool added = false;
+            string ns = Regex.Replace(sec, @"(?mi)^ObjectTemplate\.addTemplate[ \t]+([^\s]+)[ \t]*\r?\n?", delegate (Match m)
+            {
+                int s; bool known = slot.TryGetValue(m.Groups[1].Value, out s);
+                bool keep = known && (s == 1 || s == 9 || (keepPistol && s == 2)) || (add != null && m.Groups[1].Value.Equals(add, StringComparison.OrdinalIgnoreCase));
+                if (keep && add != null && m.Groups[1].Value.Equals(add, StringComparison.OrdinalIgnoreCase)) added = true;
+                return keep ? m.Value : "";
+            });
+            if (add != null && !added)
+            {
+                Match first = Regex.Match(ns, @"(?mi)^ObjectTemplate\.addTemplate[ \t]+[^\s]+(?=[ \t]*\r?$)");
+                ns = first.Success ? ns.Substring(0, first.Index + first.Length) + nl + "ObjectTemplate.addTemplate " + add + ns.Substring(first.Index + first.Length)
+                                   : nl + "ObjectTemplate.addTemplate " + add + ns;
+            }
+            return text.Substring(0, at) + ns + text.Substring(at + sec.Length);
+        }
+
         static double Num(string s) { return double.Parse(s, CultureInfo.InvariantCulture); }
 
         // Text des Abschnitts einer Vorlage (bis zur nächsten), sonst null
@@ -248,10 +390,15 @@ namespace BF2Coop
         }
 
         // Baut mods/<Basis>_fun neu. Ordner werden als Verknüpfung (Junction) auf den Basis-Mod angelegt.
-        public static List<string> Build(string gameDir, string baseMod, FunOptions o)
+        public static List<string> Build(string gameDir, string baseMod, FunOptions o) { return Build(gameDir, baseMod, o, NameFor(baseMod)); }
+
+        public static List<string> Build(string gameDir, string baseMod, FunOptions o, string name) { return Build(gameDir, baseMod, o, name, null); }
+
+        // vehicleFreeMaps: Maps, die mit „Ohne Fahrzeuge“ laufen – sie bekommen im Aufsatz eine eigene server.zip ohne Fahrzeug-Spawner
+        public static List<string> Build(string gameDir, string baseMod, FunOptions o, string name, ICollection<string> vehicleFreeMaps)
         {
             List<string> log = new List<string>();
-            string mods = Path.Combine(gameDir, "mods"), src = Path.Combine(mods, baseMod), name = NameFor(baseMod), dst = Path.Combine(mods, name);
+            string mods = Path.Combine(gameDir, "mods"), src = Path.Combine(mods, baseMod), dst = Path.Combine(mods, name);
             if (!Directory.Exists(src)) throw new Exception(I18n.T("Basis-Mod fehlt: ", "Base mod missing: ") + baseMod);
             if (FunMods.BaseOf(gameDir, baseMod) != null) throw new Exception(I18n.T("Ein Spaß-Aufsatz kann nicht Basis eines weiteren sein.", "A fun pack cannot be the base of another one."));
             List<Mount> srv = Mounts(gameDir, baseMod, "serverarchives.con"), cli = Mounts(gameDir, baseMod, "clientarchives.con");
@@ -275,7 +422,8 @@ namespace BF2Coop
                 // ---- Sprengsätze: jede Art auf eine eigene, im Kit freie Taste. Zwei Gegenstände auf derselben Taste
                 // im selben Kit lassen den Server abstürzen (bf2sf64 belegt 6–8 mit Enterhaken, Nachtsicht, Gasmaske).
                 // Neue Waffen-Vorlagen lädt BF2 nicht aus zusätzlichen Dateien, daher vorhandene: C4, Claymore, Panzermine.
-                if (o.ExtraExplosives || o.C4ForMore)
+                bool c4More = o.C4Engineer || o.C4Sniper || o.C4AT;
+                if (o.ExtraExplosives || c4More)
                 {
                     string mine = rd.Read("Objects", "Weapons/Handheld/at_mine/at_mine.tweak", out real); string mineReal = real;
                     string clay = rd.Read("Objects", "Weapons/Handheld/usmin_claymore/usmin_claymore.tweak", out real); string clayReal = real;
@@ -339,8 +487,7 @@ namespace BF2Coop
                             obj[k.Key] = AddAfter(t, "c4_explosives", add);
                             kits++;
                         }
-                        else if (o.C4ForMore && Regex.IsMatch(Path.GetFileName(k.Key), @"_(engineer|sniper|at)(_special)?\.con$", RegexOptions.IgnoreCase)
-                                 && UsedKeys(items, slot, null).IndexOf(5) < 0)
+                        else if (c4More && WantsC4(Path.GetFileName(k.Key), o) && UsedKeys(items, slot, null).IndexOf(5) < 0)
                         {
                             string nt = AddAfter(t, null, nl + "ObjectTemplate.addTemplate c4_explosives");
                             if (nt == t) continue;
@@ -350,20 +497,17 @@ namespace BF2Coop
                     if (o.ExtraExplosives) log.Add(I18n.T("Spec Ops: C4 auf Taste 5", "Spec Ops: C4 on key 5")
                         + (clayKey > 0 ? I18n.T(", Sprung-Claymore auf ", ", jump claymore on ") + clayKey : I18n.T(", Claymore: keine freie Taste", ", claymore: no free key"))
                         + (mineKey > 0 ? I18n.T(", Mega-Mine auf ", ", mega mine on ") + mineKey : I18n.T(", Mine: keine freie Taste", ", mine: no free key")) + " – " + kits + " Kits");
-                    if (o.C4ForMore) log.Add(I18n.T("C4 auch für Pionier, Scharfschütze und Panzerabwehr – ", "C4 also for engineer, sniper and anti-tank – ") + more + I18n.T(" Kits (nur wo Taste 5 frei ist)", " kits (only where key 5 is free)"));
+                    if (c4More) log.Add(I18n.T("C4 auch für weitere Klassen – ", "C4 also for more classes – ") + more + I18n.T(" Kits (nur wo Taste 5 frei ist)", " kits (only where key 5 is free)"));
                 }
-                // ---- Panzerfaust: Raketensprung, langsame Raketen, viele Raketen, schnelles Nachladen
-                if (o.RocketJump || o.RocketSpeedPct != 100)
+                // ---- Panzerfaust: Wucht und Explosionsschaden (wie C4), langsame Raketen, viele Raketen, schnelles Nachladen
+                if (o.RocketForce > 0 || o.RocketDamagePct != 100 || o.RocketSpeedPct != 100)
                     foreach (string rk in Rockets)
                     {
                         string p = "Weapons/Armament/missiles/" + rk + "/" + rk + ".tweak";
                         string t = rd.Read("Objects", p, out real);
                         if (t == null) continue;
-                        if (o.RocketJump)
-                        {
-                            t = SetInTemplate(t, rk, "detonation.explosionForce", o.RocketForce.ToString(), null);
-                            t = SetInTemplate(t, rk, "detonation.explosionMaterial", C4Material.ToString(), null);
-                        }
+                        if (o.RocketForce > 0) t = SetInTemplate(t, rk, "detonation.explosionForce", o.RocketForce.ToString(), null);
+                        if (o.RocketDamagePct != 100) t = ScaleInTemplate(t, rk, "detonation.explosionDamage", o.RocketDamagePct / 100.0);
                         if (o.RocketSpeedPct > 0 && o.RocketSpeedPct != 100)
                         {
                             Match ms = Regex.Match(t, @"(?mi)^ObjectTemplate\.maxSpeed\s+([\d.]+)"), ma = Regex.Match(t, @"(?mi)^ObjectTemplate\.acceleration\s+([\d.]+)");
@@ -393,8 +537,8 @@ namespace BF2Coop
                     }
                     obj[real] = t;
                 }
-                if (o.RocketJump || o.RocketSpeedPct != 100 || o.RocketMags > 0 || o.RocketReloadMs > 0)
-                    log.Add(I18n.T("Panzerfaust: ", "Rocket launcher: ") + (o.RocketJump ? I18n.T("Raketensprung (Wucht ", "rocket jump (force ") + o.RocketForce + "), " : "") + I18n.T("Tempo ", "speed ") + o.RocketSpeedPct + " %, " + o.RocketMags + I18n.T(" Raketen", " rockets") + (o.RocketReloadMs > 0 ? I18n.T(", Nachladen ", ", reload ") + F(o.RocketReloadMs / 1000.0) + " s" : ""));
+                if (o.RocketForce > 0 || o.RocketDamagePct != 100 || o.RocketSpeedPct != 100 || o.RocketMags > 0 || o.RocketReloadMs > 0)
+                    log.Add(I18n.T("Panzerfaust: ", "Rocket launcher: ") + I18n.T("Wucht ", "force ") + (o.RocketForce > 0 ? o.RocketForce.ToString() : "–") + I18n.T(", Explosionsschaden ", ", blast damage ") + o.RocketDamagePct + " %, " + I18n.T("Tempo ", "speed ") + o.RocketSpeedPct + " %, " + o.RocketMags + I18n.T(" Raketen", " rockets") + (o.RocketReloadMs > 0 ? I18n.T(", Nachladen ", ", reload ") + F(o.RocketReloadMs / 1000.0) + " s" : ""));
                 // ---- Turbo: Motorkraft der Landfahrzeuge (Autos und Panzer); Höchstdrehzahl steigt halb so stark mit
                 if (o.VehiclePowerPct > 0 && o.VehiclePowerPct != 100)
                 {
@@ -426,7 +570,7 @@ namespace BF2Coop
                         if (!fa.Success || !Regex.IsMatch(t, @"(?mi)^ObjectTemplate\.createComponent\s+DefaultAmmoComp")) continue;
                         string nm = fa.Groups[1].Value.ToLowerInvariant();
                         if (nm == "c4_explosives" || Array.IndexOf(Launchers, nm) >= 0) continue;
-                        if ((o.ExtraExplosives || o.C4ForMore) && (nm == "at_mine" || nm == "usmin_claymore")) continue;
+                        if ((o.ExtraExplosives || c4More) && (nm == "at_mine" || nm == "usmin_claymore")) continue;
                         Match cur = Regex.Match(t, @"(?mi)^ObjectTemplate\.ammo\.nrOfMags\s+(\d+)");
                         if (cur.Success && int.Parse(cur.Groups[1].Value) >= 99) continue;
                         // Viele Waffen setzen magSize nicht (Standardwert) – dann nach ammoType bzw. reloadTime einfügen
@@ -462,14 +606,18 @@ namespace BF2Coop
                                 else missing += (missing.Length > 0 ? Nl(t) : "") + "ObjectTemplate.detonation." + kv[0] + " " + kv[1];
                             }
                             if (missing.Length > 0) t = AddAfterCreate(t, pn, missing, "ObjectTemplate.createComponent DefaultDetonationComp");
+                            // Scharfschützenkugeln durchschlagen Wände und Boden und explodieren dann nie – wie explosive Bordkanonen-Geschosse abschalten
+                            t = SetInTemplate(t, pn, "penetrate.allowSolidPenetration", "0", null);
+                            t = SetInTemplate(t, pn, "penetrate.allowLiquidPenetration", "0", null);
+                            if (!Regex.IsMatch(Section(t, pn), @"(?mi)^ObjectTemplate\.detonation\.maxDepthForExplosion\s")) t = AddAfterCreate(t, pn, "ObjectTemplate.detonation.maxDepthForExplosion 2", "ObjectTemplate.createComponent DefaultDetonationComp");
                             n++;
                         }
                         obj[w.Key] = t;
                     }
                     log.Add(I18n.T("Explosiv-Sniper: ", "Explosive sniper: ") + n + I18n.T(" Geschosse, Wucht ", " projectiles, force ") + o.SniperForce);
                 }
-                // ---- Granaten-Sprung: Handgranaten schleudern statt zu töten
-                if (o.GrenadeForce > 0)
+                // ---- Handgranaten: Wucht und Explosionsschaden einzeln (Granaten-Sprung = viel Wucht, wenig Schaden)
+                if (o.GrenadeForce > 0 || o.GrenadeDamagePct != 100)
                 {
                     int n = 0;
                     foreach (KeyValuePair<string, string> w in rd.Find("Objects", new Regex(@"^Weapons/Handheld/[^/]*hgr[^/]*/[^/]+\.tweak$", RegexOptions.IgnoreCase)))
@@ -478,13 +626,13 @@ namespace BF2Coop
                         string t = obj.ContainsKey(w.Key) ? obj[w.Key] : w.Value;
                         foreach (Match pm in Regex.Matches(t, @"(?mi)^ObjectTemplate\.create\s+GenericProjectile\s+(\S+)\s*$"))
                         {
-                            t = SetInTemplate(t, pm.Groups[1].Value, "detonation.explosionForce", o.GrenadeForce.ToString(), null);
-                            t = SetInTemplate(t, pm.Groups[1].Value, "detonation.explosionMaterial", C4Material.ToString(), null);
+                            if (o.GrenadeForce > 0) t = SetInTemplate(t, pm.Groups[1].Value, "detonation.explosionForce", o.GrenadeForce.ToString(), null);
+                            if (o.GrenadeDamagePct != 100) t = ScaleInTemplate(t, pm.Groups[1].Value, "detonation.explosionDamage", o.GrenadeDamagePct / 100.0);
                             n++;
                         }
                         obj[w.Key] = t;
                     }
-                    log.Add(I18n.T("Granaten-Sprung: ", "Grenade jump: ") + n + I18n.T(" Granaten, Wucht ", " grenades, force ") + o.GrenadeForce);
+                    log.Add(I18n.T("Handgranaten: ", "Hand grenades: ") + n + I18n.T(" Arten, Wucht ", " types, force ") + (o.GrenadeForce > 0 ? o.GrenadeForce.ToString() : "–") + I18n.T(", Explosionsschaden ", ", blast damage ") + o.GrenadeDamagePct + " %");
                 }
                 // ---- Sprinten ohne Ausdauer
                 if (o.EndlessSprint)
@@ -504,6 +652,40 @@ namespace BF2Coop
                         obj[k.Key] = SetValue(t, "sprintStaminaDissipationFactor", "0", null);
                     }
                     log.Add(I18n.T("Sprinten ohne Ausdauer (", "Sprint without stamina (") + n + I18n.T(" Soldaten)", " soldiers)"));
+                }
+                // ---- Waffen-Regel: alle Klassen bekommen nur noch eine Waffenart (+ Messer und Fallschirm)
+                if (o.WeaponRule > 0)
+                {
+                    Dictionary<string, int> sl = ItemSlots(rd);
+                    List<KeyValuePair<string, string>> kits = rd.Find("Objects", new Regex(@"^Kits/.*\.con$", RegexOptions.IgnoreCase));
+                    Dictionary<string, string> atBy = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), snBy = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    string atAny = null, snAny = null;
+                    foreach (KeyValuePair<string, string> k in kits)
+                    {
+                        string folder = Path.GetDirectoryName(k.Key.Replace('/', '\\')), fn = Path.GetFileNameWithoutExtension(k.Key).ToLowerInvariant();
+                        foreach (string it in KitItems(k.Value))
+                        {
+                            int s; if (!sl.TryGetValue(it, out s)) continue;
+                            if (fn.EndsWith("_at") && s == 4) { if (!atBy.ContainsKey(folder)) atBy[folder] = it; if (atAny == null) atAny = it; }
+                            if (fn.EndsWith("_sniper") && s == 3) { if (!snBy.ContainsKey(folder)) snBy[folder] = it; if (snAny == null) snAny = it; }
+                        }
+                    }
+                    int n = 0;
+                    foreach (KeyValuePair<string, string> k in kits)
+                    {
+                        string t = obj.ContainsKey(k.Key) ? obj[k.Key] : k.Value;
+                        Match km = Regex.Match(t, @"(?mi)^ObjectTemplate\.create[ \t]+Kit[ \t]+([^\s]+)");
+                        if (!km.Success) continue;
+                        string folder = Path.GetDirectoryName(k.Key.Replace('/', '\\')), add = null, v;
+                        if (o.WeaponRule == 3) add = "c4_explosives";
+                        else if (o.WeaponRule == 4) add = atBy.TryGetValue(folder, out v) ? v : atAny;
+                        else if (o.WeaponRule == 5) add = snBy.TryGetValue(folder, out v) ? v : snAny;
+                        else if (o.WeaponRule >= 6 && o.WeaponRule < RuleRx.Length && RuleRx[o.WeaponRule] != null) add = PickWeapon(kits, sl, folder, new Regex(RuleRx[o.WeaponRule], RegexOptions.IgnoreCase));
+                        string nt = RestrictKit(t, km.Groups[1].Value, sl, o.WeaponRule == 2, add);
+                        if (nt != t) { obj[k.Key] = nt; n++; }
+                    }
+                    string[] names = { "", I18n.T("nur Messer", "knife only"), I18n.T("nur Pistole", "pistol only"), I18n.T("nur C4", "C4 only"), I18n.T("nur Panzerfaust", "rocket launcher only"), I18n.T("nur Scharfschützengewehr", "sniper rifle only"), I18n.T("nur Schrotflinte", "shotgun only"), I18n.T("nur MG", "machine gun only"), I18n.T("nur Handgranaten", "hand grenades only"), I18n.T("nur Defibrillator", "defibrillator only") };
+                    log.Add(I18n.T("Waffen-Regel: ", "Weapon rule: ") + (o.WeaponRule < names.Length ? names[o.WeaponRule] : "?") + " – " + n + " Kits");
                 }
                 // ---- Lebenspunkte der Soldaten
                 if (o.HealthPct > 0 && o.HealthPct != 100)
@@ -576,9 +758,12 @@ namespace BF2Coop
             File.WriteAllText(Path.Combine(dst, "clientarchives.con"), Archives(cli.Count > 0 ? cli : srv), Enc);
             StringBuilder rc = new StringBuilder("# Spass-Aufsatz (BF2 Manager)\r\nBase=" + baseMod + "\r\n");
             foreach (KeyValuePair<string, string> kv in o.ToDict()) rc.Append(kv.Key).Append('=').Append(kv.Value).Append("\r\n");
+            List<string> freeMaps = new List<string>();
+            if (o.NoVehicles && vehicleFreeMaps != null) freeMaps = VehicleFreeLevels(gameDir, src, dst, vehicleFreeMaps, log);
+            rc.Append("VehicleFreeMaps=").Append(string.Join(",", freeMaps.ToArray())).Append("\r\n");
             File.WriteAllText(Path.Combine(dst, FunMods.RecipeFile), rc.ToString(), Enc);
             FunMods.Link(gameDir, name);
-            ModPrints.Invalidate(name);
+            ModPrints.Invalidate(name); ManifestStore.Invalidate(dst);
             return log;
         }
 
@@ -626,15 +811,118 @@ namespace BF2Coop
             return string.Join("\r\n", lines);
         }
 
-        // Entfernt einen Spaß-Aufsatz: erst die Verknüpfungen (ohne den Basis-Mod anzufassen), dann die eigenen Dateien
+        // Entfernt einen Spaß-Aufsatz: Verknüpfungen nur lösen (nie dem Ziel folgen – das ist der Basis-Mod), eigene Dateien löschen
         public static void Remove(string gameDir, string name)
         {
             string dst = Path.Combine(Path.Combine(gameDir, "mods"), name);
             if (!Directory.Exists(dst)) return;
             if (FunMods.BaseOf(gameDir, name) == null) throw new Exception(I18n.T("Kein Spaß-Aufsatz: ", "Not a fun pack: ") + name);
-            foreach (string d in Directory.GetDirectories(dst))
-                if ((File.GetAttributes(d) & FileAttributes.ReparsePoint) != 0) Directory.Delete(d, false);
-            Directory.Delete(dst, true);
+            RemoveTree(dst);
         }
+
+        static void RemoveTree(string dir)
+        {
+            foreach (string d in Directory.GetDirectories(dir))
+            {
+                if ((File.GetAttributes(d) & FileAttributes.ReparsePoint) != 0) Retry(delegate { Directory.Delete(d, false); });
+                else RemoveTree(d);
+            }
+            foreach (string f in Directory.GetFiles(dir)) { string ff = f; Retry(delegate { File.SetAttributes(ff, FileAttributes.Normal); File.Delete(ff); }); }
+            Retry(delegate { Directory.Delete(dir, false); });
+        }
+
+        // Kurz nach dem Beenden des Servers sind Dateien manchmal noch gesperrt – ein paar Mal versuchen
+        static void Retry(Action a)
+        {
+            for (int i = 0; ; i++)
+            {
+                try { a(); return; }
+                catch (IOException) { if (i >= 9) throw; System.Threading.Thread.Sleep(500); }
+                catch (UnauthorizedAccessException) { if (i >= 9) throw; System.Threading.Thread.Sleep(500); }
+            }
+        }
+
+        // ---- Ohne Fahrzeuge: Fahrzeuge, die man fahren/fliegen kann (Panzer, Jets, Helis, Jeeps, Boote) – laut BF2-Statistik-Tabelle
+        // (python/bf2/stats/constants.py), sonst nach dem Namen. Stationäre Waffen und Commander-Anlagen bleiben.
+        public static HashSet<string> DrivableTypes(string gameDir)
+        {
+            HashSet<string> r = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                string f = Path.Combine(Path.Combine(Path.Combine(Path.Combine(gameDir, "python"), "bf2"), "stats"), "constants.py");
+                if (File.Exists(f))
+                    foreach (Match m in Regex.Matches(File.ReadAllText(f), @"[""']([\w\-]+)[""']\s*:\s*VEHICLE_TYPE_(ARMOR|AVIATOR|HELICOPTER|TRANSPORT)\b"))
+                        r.Add(m.Groups[1].Value);
+            }
+            catch { }
+            return r;
+        }
+
+        public static bool IsDrivable(string template, HashSet<string> known)
+        {
+            if (known != null && known.Contains(template)) return true;
+            // Nicht „air“ allein: aircontroltower ist eine Commander-Anlage
+            return Regex.IsMatch(template, @"(^|_)([a-z]{2,3})?(tnk|apc|jep|jeep|ahe|ath|the|lav|hmmwv|boat|rib|truck|bmp|btr|tunguska|linebacker|faav|quad|motorbike|air_)", RegexOptions.IgnoreCase);
+        }
+
+        // Spawner-Zeilen für Fahrzeuge aus GamePlayObjects.con entfernen (der Spawner bleibt, erzeugt dann aber nichts)
+        public static string RemoveVehicleSpawns(string gpo, HashSet<string> known, out int removed)
+        {
+            int n = 0;
+            string r = Regex.Replace(gpo, @"(?mi)^ObjectTemplate\.setObjectTemplate[ \t]+\d+[ \t]+([^\s]+)[ \t]*\r?\n?", delegate (Match m)
+            {
+                if (!IsDrivable(m.Groups[1].Value, known)) return m.Value;
+                n++; return "";
+            });
+            removed = n; return r;
+        }
+
+        // Für die angegebenen Maps im Aufsatz einen echten Map-Ordner anlegen: server.zip ohne Fahrzeug-Spawner,
+        // alle übrigen Dateien als Hardlink (gleicher Inhalt, kein Platz), Unterordner verknüpft FunMods.Link.
+        static List<string> VehicleFreeLevels(string gameDir, string src, string dst, ICollection<string> maps, List<string> log)
+        {
+            List<string> done = new List<string>();
+            string sl = Path.Combine(src, "levels"), dl = Path.Combine(dst, "levels");
+            if (!Directory.Exists(sl)) return done;
+            HashSet<string> known = DrivableTypes(gameDir);
+            int spawns = 0;
+            foreach (string map in maps)
+            {
+                string from = null;
+                foreach (string d in Directory.GetDirectories(sl)) if (Path.GetFileName(d).Equals(map, StringComparison.OrdinalIgnoreCase)) from = d;
+                if (from == null || !File.Exists(Path.Combine(from, "server.zip"))) continue;
+                string to = Path.Combine(dl, Path.GetFileName(from));
+                Directory.CreateDirectory(to);
+                foreach (string f in Directory.GetFiles(from))
+                {
+                    string target = Path.Combine(to, Path.GetFileName(f));
+                    if (Path.GetFileName(f).Equals("server.zip", StringComparison.OrdinalIgnoreCase))
+                    {
+                        File.Copy(f, target, true);
+                        using (ZipArchive z = ZipFile.Open(target, ZipArchiveMode.Update))
+                        {
+                            List<ZipArchiveEntry> gpo = new List<ZipArchiveEntry>();
+                            foreach (ZipArchiveEntry e in z.Entries) if (Regex.IsMatch(e.FullName, @"^GameModes/.+/GamePlayObjects\.con$", RegexOptions.IgnoreCase)) gpo.Add(e);
+                            foreach (ZipArchiveEntry e in gpo)
+                            {
+                                string text; using (StreamReader sr = new StreamReader(e.Open(), Enc)) text = sr.ReadToEnd();
+                                int n; string nt = RemoveVehicleSpawns(text, known, out n);
+                                if (n == 0) continue;
+                                spawns += n; string en = e.FullName; DateTimeOffset when = e.LastWriteTime; e.Delete();
+                                ZipArchiveEntry ne = z.CreateEntry(en); ne.LastWriteTime = when;
+                                using (StreamWriter w = new StreamWriter(ne.Open(), Enc)) w.Write(nt);
+                            }
+                        }
+                    }
+                    else if (!CreateHardLink(target, f, IntPtr.Zero)) File.Copy(f, target, true);
+                }
+                done.Add(Path.GetFileName(from));
+            }
+            if (done.Count > 0) log.Add(I18n.T("Ohne Fahrzeuge: ", "No vehicles: ") + string.Join(", ", done.ToArray()) + " (" + spawns + I18n.T(" Spawner-Einträge entfernt)", " spawner entries removed)"));
+            return done;
+        }
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+        static extern bool CreateHardLink(string newFile, string existingFile, IntPtr security);
     }
 }

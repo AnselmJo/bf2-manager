@@ -46,6 +46,7 @@ namespace BF2Coop
                 foreach (int s in new int[] { 16, 32, 64 }) if (!_st.Defaults.ContainsKey(s)) _st.Defaults[s] = new CoopState().Defaults[s];
                 if (_coop && ct != null && ct.Maps.Count > 0) _st.Maps = ct.Maps;
                 else _st.Maps = Maplist.Read(Path.Combine(CfgDir, "maplist.con"));
+                try { MapRules.Apply(Path.Combine(ModSettingsDir, MapRules.FileName), _st.Maps); } catch { }
                 _vals["@commander"] = _st.Commander ? "1" : "0";
                 _saved = new Dictionary<string, string>(_vals, StringComparer.OrdinalIgnoreCase);
 
@@ -181,6 +182,7 @@ namespace BF2Coop
                 }
                 ConFile.Save(sf, conVals);
                 Maplist.Write(mf, _st.Maps);
+                MapRules.Save(Path.Combine(ModSettingsDir, MapRules.FileName), _st.Maps);
                 if (_aiDirty && _ai != null && _ai.Path != null)
                 {
                     _ai.Override = _aiOverride.Checked ? 1 : 0; _ai.IncludeHumans = _aiInclude.Checked ? 1 : 0; _ai.MaxBots = _aiMax.Value;
@@ -226,7 +228,7 @@ namespace BF2Coop
             LoadAll();
             WarnModule();
             Toast((_coop ? "Coop" : "Conquest") + " · " + _mod, ToastKind.Info);
-            UpdateFunCard();
+            RefreshFlowBar();
         }
     }
 }

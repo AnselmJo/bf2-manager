@@ -148,8 +148,14 @@ namespace BF2Coop
         public string Name, Mode;
         public int Size;
         public BotOpt Opt;
+        // Spaßregeln nur für diese Map (null = normale Regeln); Schlüssel wie FunOptions.ToDict
+        public Dictionary<string, string> Fun;
         public string Key { get { return Name + "|" + Mode + "|" + Size; } }
-        public MapEntry Clone() { MapEntry m = (MapEntry)MemberwiseClone(); m.Opt = Opt == null ? null : Opt.Clone(); return m; }
+        public MapEntry Clone()
+        {
+            MapEntry m = (MapEntry)MemberwiseClone(); m.Opt = Opt == null ? null : Opt.Clone();
+            m.Fun = Fun == null ? null : new Dictionary<string, string>(Fun, StringComparer.OrdinalIgnoreCase); return m;
+        }
         public static MapEntry Make(string name, string mode, int size) { MapEntry m = new MapEntry(); m.Name = name; m.Mode = mode; m.Size = size; return m; }
     }
 

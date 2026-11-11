@@ -45,8 +45,8 @@ namespace BF2Coop
             steps.Add(delegate { Shot("host_bots"); _botHost.ScrollTo(99999, false); });
             steps.Add(delegate { Shot("host_bots_scrolled"); SelectPage(PgServer); });
             steps.Add(delegate { Shot("host_options"); _advToggle.Checked = !_advToggle.Checked; });
-            steps.Add(delegate { Shot("host_options_adv"); if (_cFun != null) _srvHost.EnsureVisible(_cFun); });
-            steps.Add(delegate { Shot("host_options_fun"); _advToggle.Checked = !_advToggle.Checked; SelectPage(PgExtras); });
+            steps.Add(delegate { Shot("host_options_adv"); _advToggle.Checked = !_advToggle.Checked; SelectPage(PgMaps); if (_st.Maps.Count > 0) { _lbRot.SelectedIndex = 0; ApplyFunPreset("c4"); _mapRight.ScrollTo(99999, false); } });
+            steps.Add(delegate { Shot("host_server_funrules"); _mapRight.ScrollTo(0, false); SelectPage(PgExtras); });
             steps.Add(delegate { Shot("host_settings"); Srv.FakeRunning = true; RefreshLive(); ShowServerView(); });
             steps.Add(delegate { Shot("host_live"); ShowResult("admin.listPlayers", "Id:255 - C. Bergqvist is remote  is an AI bot. | Id:254 - S. Parkinson is remote  is an AI bot. | Id:3 - Ansi  is remote"); });
             steps.Add(delegate { Shot("host_live_result"); _module = true; bn[0] = new BotNowDialog("Dalian Plant", _st.Defaults[16].Clone(), 16, 6, 0); bn[0].StartPosition = FormStartPosition.Manual; bn[0].Location = PointToScreen(new Point(Dpi.D(200), Dpi.D(60))); bn[0].Show(this); });

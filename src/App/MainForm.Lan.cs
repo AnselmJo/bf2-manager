@@ -57,7 +57,7 @@ namespace BF2Coop
             string map, hu, hm, bu, bm; live.TryGetValue("map", out map);
             LanHost h = new LanHost();
             h.Name = _vals.ContainsKey("sv.serverName") ? _vals["sv.serverName"] : "BF2";
-            h.GamePort = Util.ToInt(_vals["sv.serverPort"], 16567); h.Mod = _mod.Length > 0 ? _mod : PlayMod; h.Map = map ?? "";
+            h.GamePort = Util.ToInt(_vals["sv.serverPort"], 16567); h.Mod = _running && _runMod != null ? _runMod : (_mod.Length > 0 ? _mod : PlayMod); h.Map = map ?? "";
             h.Humans = live.TryGetValue("humansUS", out hu) && live.TryGetValue("humansMEC", out hm) ? Util.ToInt(hu, 0) + Util.ToInt(hm, 0) : 0;
             h.Bots = live.TryGetValue("botsUS", out bu) && live.TryGetValue("botsMEC", out bm) ? Util.ToInt(bu, 0) + Util.ToInt(bm, 0) : 0;
             h.Max = Util.ToInt(_vals["sv.maxPlayers"], 64); h.Mode = _coop ? "coop" : "cq"; h.Running = _running;
@@ -80,6 +80,7 @@ namespace BF2Coop
             if (_page == PgPlayer && !_syncBusy) RefreshServers(false);
             HostPrintTick();
             AutoJoinTick();
+            try { AnnounceTick(); FlowTick(); HearTick(); FollowTick(); } catch (Exception ex) { Util.Log(AppPaths.Dir, ex.ToString()); }
             // Ändert sich, ob die eigene Bekanntmachung ankommt, den PC-Check neu laufen lassen
             bool? e = EchoState;
             if (e != null && e != _echoShown) RefreshChecks(true);
@@ -112,7 +113,8 @@ namespace BF2Coop
             if (_firstBeacon == DateTime.MinValue) _firstBeacon = DateTime.Now;
             LanHost h = OwnHost(live);
             string payload = Lan.Payload(h.Name, h.GamePort, h.Mod, h.Map, h.Humans, h.Max, h.Mode, h.Running)
-                + "|" + h.Id + "|" + h.Size + "|" + h.Bots + "|" + Lan.Esc(h.ModVersion) + "|" + Lan.Esc(h.Fp);
+                + "|" + h.Id + "|" + h.Size + "|" + h.Bots + "|" + Lan.Esc(h.ModVersion) + "|" + Lan.Esc(h.Fp)
+                + "|" + Lan.Esc(_annId) + "|" + Lan.Esc(_annText) + "|" + Lan.Esc(_nextModAnn);
             ThreadPool.QueueUserWorkItem(delegate { try { Lan.Announce(payload); } catch { } });
         }
 
@@ -141,7 +143,7 @@ namespace BF2Coop
                 string err = null; SyncPlan plan = null;
                 try
                 {
-                    List<FileEntry> remote = Lan.ParseManifest(Lan.GetText(h, "/manifest?mod=" + Uri.EscapeDataString(mod), 900000));
+                    List<FileEntry> remote = Lan.ParseManifest(ModSync.GetManifest(h, mod, "", delegate (string s) { try { BeginInvoke((MethodInvoker)delegate { SetSync(s); }); } catch { } }, delegate { return _syncCancel; }));
                     int last = -1;
                     List<FileEntry> local = Lan.BuildManifest(root, delegate (int i, int n)
                     {

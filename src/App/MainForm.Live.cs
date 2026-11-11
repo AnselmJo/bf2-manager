@@ -422,7 +422,18 @@ namespace BF2Coop
                         if (DarkDialog.Confirm(this, "Kick", T("„", "“") + name + T("“ vom Server werfen?", "” – kick from the server?"), "Kick", true))
                             SendCmd("admin.kickPlayer " + id, T("Kick gesendet.", "Kick sent."));
                     };
-                    FormRow row = new FormRow("", null, kick, kick.Width, false);
+                    FlatButton team = new FlatButton("Team", G.Refresh, BtnKind.Ghost);
+                    team.Height = Dpi.D(28); team.Fit();
+                    Theme.Tip.SetToolTip(team, T("Teamwechsel\nSchickt den Spieler ins andere Team. Wer gerade lebt, stirbt kurz und spawnt dort neu. Braucht das Bot-Modul ab Version 7 (Einstellungen › Mods › Bot-Modul aktualisieren).", "Switch team\nMoves the player to the other team. If alive, they die briefly and respawn there. Needs bot module version 7 or later (Settings › Mods › update bot module)."));
+                    team.Click += delegate
+                    {
+                        ModStatus ms;
+                        if (_status.TryGetValue(_mod, out ms) && ms.Installed && ms.Version < 7) { Toast(T("Das Bot-Modul auf dem Server ist Version ", "The bot module on the server is version ") + ms.Version + T(" – Teamwechsel braucht 7. Server beenden und neu starten, dann wird es automatisch ersetzt.", " – team switch needs 7. Stop and start the server, it is replaced automatically."), ToastKind.Warn); return; }
+                        SendCmd("@team " + id, T("Teamwechsel gesendet: ", "Team switch sent: ") + name);
+                    };
+                    ButtonRow acts = Buttons(team, kick);
+                    int aw = team.Width + Dpi.D(8) + kick.Width; acts.Size = new Size(aw, Dpi.D(28)); acts.LayoutFor(aw);
+                    FormRow row = new FormRow("", null, acts, aw, false);
                     row.Tag = p;
                     _playerRows.Add(row); _cPlayers.Controls.Add(row);
                 }

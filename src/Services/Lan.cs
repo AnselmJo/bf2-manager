@@ -31,6 +31,8 @@ namespace BF2Coop
         public string Ip, Name, Mod, Map, Version, Mode, Id, ModVersion;
         // Prüfsumme über alle Mod-Dateien (leer bei älteren Managern oder solange sie noch berechnet wird)
         public string Fp;
+        // Letzte Ansage des Server-PCs (Kennung, Text) und der Mod der nächsten Playlist-Runde
+        public string AnnId = "", AnnText = "", NextMod = "";
         public int GamePort, Humans, Max, HttpPort, Size, Bots;
         public bool Running, Self;
         public DateTime Seen;
@@ -120,6 +122,7 @@ namespace BF2Coop
             h.Humans = Util.ToInt(p[5], 0); h.Max = Util.ToInt(p[6], 0); h.HttpPort = Util.ToInt(p[7], HttpPort); h.Version = p[8]; h.Mode = p[9]; h.Running = p[10] == "1";
             if (p.Length >= 15) { h.Id = p[11]; h.Size = Util.ToInt(p[12], 0); h.Bots = Util.ToInt(p[13], 0); h.ModVersion = p[14]; }
             if (p.Length >= 16) h.Fp = p[15];
+            if (p.Length >= 19) { h.AnnId = p[16]; h.AnnText = p[17]; h.NextMod = p[18]; }
             h.Seen = DateTime.Now;
             foreach (IPAddress a in LocalAddresses()) if (a.Equals(from)) h.Self = true;
             return h;
@@ -334,8 +337,6 @@ namespace BF2Coop
     {
         TcpListener _tcp; Thread _th; volatile bool _stop;
         readonly string _gameDir;
-        readonly Dictionary<string, List<FileEntry>> _manifests = new Dictionary<string, List<FileEntry>>(StringComparer.OrdinalIgnoreCase);
-        readonly object _lock = new object();
         public string Error;
 
         readonly int _port;
@@ -362,19 +363,9 @@ namespace BF2Coop
             }
         }
 
-        // Manifest einmal berechnen und merken (Neuberechnung, wenn älter als 2 Minuten)
-        readonly Dictionary<string, DateTime> _built = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
-        public List<FileEntry> Manifest(string mod)
-        {
-            lock (_lock)
-            {
-                List<FileEntry> m; DateTime t;
-                if (_manifests.TryGetValue(mod, out m) && _built.TryGetValue(mod, out t) && (DateTime.Now - t).TotalMinutes < 2) return m;
-                m = Lan.BuildManifest(Path.Combine(_gameDir, "mods", mod), null, null);
-                _manifests[mod] = m; _built[mod] = DateTime.Now;
-                return m;
-            }
-        }
+        // Dateiliste aus dem gemeinsamen Speicher: fertig = Liste, sonst null und pct (die Berechnung läuft im Hintergrund weiter).
+        // Früher hielt die erste große Prüfung die Anfrage minutenlang fest – der Spieler-PC lief dann in einen Timeout.
+        public List<FileEntry> Manifest(string mod, out int pct) { return ManifestStore.TryGet(Path.Combine(_gameDir, "mods", mod), out pct); }
 
         void Handle(TcpClient c)
         {
@@ -397,7 +388,12 @@ namespace BF2Coop
                     if (path == "/info")
                         Send(ns, 200, "text/plain", Encoding.UTF8.GetBytes(Lan.Magic + "|" + AppInfo.Version + "|" + string.Join(",", GameLocator.AllMods(_gameDir).ToArray())));
                     else if (path == "/manifest" && mod != null)
-                        Send(ns, 200, "text/plain", Encoding.UTF8.GetBytes(Lan.ManifestText(Manifest(mod))));
+                    {
+                        // Noch nicht fertig: sofort „beschäftigt“ mit Fortschritt melden; der Spieler-PC fragt dann wieder
+                        int pct; List<FileEntry> m = Manifest(mod, out pct);
+                        if (m == null) Send(ns, 503, "text/plain", Encoding.ASCII.GetBytes("busy|" + pct));
+                        else Send(ns, 200, "text/plain", Encoding.UTF8.GetBytes(Lan.ManifestText(m)));
+                    }
                     else if (path == "/file" && mod != null)
                     {
                         string rel; args.TryGetValue("p", out rel);
@@ -429,7 +425,7 @@ namespace BF2Coop
 
         static void Send(NetworkStream ns, int code, string type, byte[] body)
         {
-            byte[] h = Encoding.ASCII.GetBytes("HTTP/1.0 " + code + " " + (code == 200 ? "OK" : "Error") + "\r\nContent-Type: " + type + "\r\nContent-Length: " + body.Length + "\r\nConnection: close\r\n\r\n");
+            byte[] h = Encoding.ASCII.GetBytes("HTTP/1.0 " + code + " " + (code == 200 ? "OK" : (code == 503 ? "Busy" : "Error")) + "\r\nContent-Type: " + type + "\r\nContent-Length: " + body.Length + "\r\nConnection: close\r\n\r\n");
             ns.Write(h, 0, h.Length); ns.Write(body, 0, body.Length);
         }
 

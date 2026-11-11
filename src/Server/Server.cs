@@ -45,6 +45,16 @@ namespace BF2Coop
             catch { return 0; }
         }
 
+        // Battlefield 2 (Spiel) beenden – für den Wechsel in einen anderen Mod des Servers
+        public static void KillGame()
+        {
+            foreach (Process p in Process.GetProcessesByName("BF2"))
+            {
+                try { p.Kill(); p.WaitForExit(5000); } catch { }
+                p.Dispose();
+            }
+        }
+
         public static void Kill()
         {
             foreach (Process p in Process.GetProcessesByName("bf2_w32ded"))

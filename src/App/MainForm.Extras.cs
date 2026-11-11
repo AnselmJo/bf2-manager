@@ -176,6 +176,7 @@ namespace BF2Coop
                 string state = !s.Installed ? T("nicht eingerichtet", "not set up") : (s.Outdated ? T("Bot-Modul veraltet", "bot module outdated") : (!s.Hooked ? T("nicht eingebunden", "not hooked") : (!s.Writable ? T("keine Schreibrechte", "no write access") : T("bereit", "ready"))));
                 if (selected.Contains(m) && !s.Ok) bad++;
                 string ver = ModInfo.Read(GameDir, m).Version;
+                if (s.Installed) state += T("   ·   Bot-Modul ", "   ·   bot module ") + s.Version + (s.Outdated ? T(" (neu: ", " (new: ") + AppInfo.ModuleVersion + T(" – wird beim nächsten Serverstart ersetzt)", " – replaced at the next server start)") : "");
                 FormRow row = new FormRow((s.Ok ? "✓  " : "⚠  ") + m + (string.IsNullOrEmpty(ver) ? "" : " " + ver) + "   ·   " + state, T("Mod ", "Mod ") + m + T("\nSchalter an = diesen Mod verwalten und das Bot-Modul installieren.\n\nStatus: ", "\nSwitch on = manage this mod and install the bot module.\n\nStatus: ") + state, t, t.Width, false);
                 _modRows.Add(row); _modToggles[m] = t; _cSetup.Controls.Add(row);
             }
@@ -281,7 +282,7 @@ namespace BF2Coop
                 if (!s.Installed || !s.Outdated || !s.Hooked || !s.Writable) continue;
                 try { Installer.WriteModule(GameDir, m); n++; } catch { }
             }
-            if (n > 0) { RefreshStatus(); Toast(T("Bot-Modul aktualisiert.", "Bot module updated."), ToastKind.Ok); }
+            if (n > 0) { RefreshStatus(); Toast(T("Bot-Modul auf Version ", "Bot module updated to version ") + AppInfo.ModuleVersion + T(" aktualisiert.", "."), ToastKind.Ok); }
         }
 
         void WarnModule()

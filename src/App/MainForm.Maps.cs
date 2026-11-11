@@ -31,14 +31,15 @@ namespace BF2Coop
         // ================================================================== Seite Maps
         void BuildMaps()
         {
-            PageHeader ph = NewPage(2, "Server", T("Rotation zusammenstellen, Bots pro Map einstellen, oben „Server starten“", "Build the rotation, set bots per map, then “Start server” at the top"));
+            PageHeader ph = NewPage(2, "Server", T("Rotation zusammenstellen, Bots und Spaßregeln pro Map einstellen, oben „Server starten“", "Build the rotation, set bots and fun rules per map, then “Start server” at the top"));
             ContextMenuStrip cfgMenu = Theme.Menu();
             cfgMenu.Opening += delegate { BuildConfigMenu(cfgMenu); };
             FlatButton bRecent = new FlatButton(T("Zuletzt & Vorlagen", "Recent & presets"), G.Refresh, BtnKind.Secondary); bRecent.DropMenu = cfgMenu; bRecent.MenuOnly = true; bRecent.Fit();
             Theme.Tip.SetToolTip(bRecent, T("Zuletzt gestartete Konfigurationen wieder laden, Vorlagen laden oder speichern.", "Reload recently started configurations, load or save presets."));
             ph.AddRight(bRecent);
             _mapsBody = new BufferedPanel(); _mapsBody.Dock = DockStyle.Fill; _mapsBody.BackColor = Theme.Bg;
-            Dock3(_pages[2], ph, null, _mapsBody);
+            BuildFlowBar();
+            Dock3(_pages[2], ph, _flowBar, _mapsBody);
 
             _cAvail = new Card(T("Verfügbar", "Available"), G.Globe);
             _filter = new TextField(G.Search, T("Map suchen", "Search map"));
@@ -124,7 +125,8 @@ namespace BF2Coop
             };
             _ovToggle.CheckedChanged += delegate { OnOverrideToggle(); };
             _ovEd.Changed += delegate { if (_curRot != null && _curRot.Opt != null) { _curRot.Opt = _ovEd.Opt; RefreshRot(); MarkDirty(); } };
-            _mapRight.Canvas.Controls.Add(_preview); _mapRight.Canvas.Controls.Add(_cOv);
+            BuildFunMapCard();
+            _mapRight.Canvas.Controls.Add(_preview); _mapRight.Canvas.Controls.Add(_cOv); _mapRight.Canvas.Controls.Add(_cFunMap);
 
             _mapsBody.Controls.Add(_cAvail); _mapsBody.Controls.Add(_cRot); _mapsBody.Controls.Add(_mapRight);
             _mapsBody.Resize += delegate { LayoutMaps(); };
@@ -164,7 +166,10 @@ namespace BF2Coop
             int y = w + Dpi.D(16);
             bool showOv = _coop && _curRot != null;
             _cOv.Visible = showOv;
-            if (showOv) { int h = _cOv.LayoutFor(w); _cOv.SetBounds(0, y, w, h); y += h + Dpi.D(24); }
+            if (showOv) { int h = _cOv.LayoutFor(w); _cOv.SetBounds(0, y, w, h); y += h + Dpi.D(16); }
+            bool showFun = _curRot != null;
+            _cFunMap.Visible = showFun;
+            if (showFun) { int h = _cFunMap.LayoutFor(w); _cFunMap.SetBounds(0, y, w, h); y += h + Dpi.D(24); }
             _mapRight.SetContentHeight(y);
         }
 
@@ -242,6 +247,7 @@ namespace BF2Coop
                 v.Star = m.Opt != null;
                 v.Warn = _avail.Count > 0 && !_availIx.ContainsKey(m.Key);
                 v.Sub = v.Warn ? T("nicht im Mod gefunden", "not found in mod") : (_coop ? RowText(m, false) : "Conquest");
+                string fs = FunShort(m); if (fs != null) v.Sub += "  ·  ⚡ " + fs;
                 _lbRot.Items.Add(v);
             }
             if (sel >= 0 && sel < _lbRot.Items.Count) _lbRot.SelectedIndex = sel;
@@ -251,6 +257,7 @@ namespace BF2Coop
             _nav[2].Badge = _st.Maps.Count > 0 ? _st.Maps.Count.ToString() : null; _nav[2].Invalidate();
             if (_st.Maps.Count == 0 && _curRot != null) { _curRot = null; UpdateOverrideUi(); }
             else if (_curRot != null) UpdateOvInfo();
+            RefreshFlowBar();
         }
 
         void OnRotSelect()
@@ -259,6 +266,7 @@ namespace BF2Coop
             MapEntry m = i >= 0 && i < _st.Maps.Count ? _st.Maps[i] : null;
             if (m == _curRot) return;
             _curRot = m;
+            UpdateFunMapUi();
             UpdateOverrideUi();
             if (m != null) { AvailMap a; _availIx.TryGetValue(m.Key, out a); ShowPreview(a, m); }
         }

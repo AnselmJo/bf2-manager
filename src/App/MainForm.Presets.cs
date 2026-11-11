@@ -21,7 +21,11 @@ namespace BF2Coop
                 string type = d.TryGetValue("Type", out o) && Convert.ToString(o) == "conquest" ? "Conquest" : "Coop";
                 p.Add(mod + " · " + type + " · " + ((System.Collections.ICollection)d["Maps"]).Count + " Maps");
             }
-            if (d.ContainsKey("Fun")) p.Add(I18n.T("Spaßrunde", "fun round"));
+            if (d.TryGetValue("MapFun", out o) && o is System.Collections.ICollection)
+            {
+                int n = 0; foreach (object x in (System.Collections.ICollection)o) if (x != null && Convert.ToString(x).Length > 0) n++;
+                if (n > 0) p.Add(I18n.T("Spaßregeln auf ", "fun rules on ") + n + " Maps");
+            }
             return string.Join("  ·  ", p.ToArray());
         }
 
@@ -60,11 +64,6 @@ namespace BF2Coop
         {
             Dictionary<string, object> d = Snapshot(withMaps);
             if (!withMaps) { d.Remove("Mod"); d.Remove("Type"); }
-            if (withFun)
-            {
-                Dictionary<string, string> f = new Dictionary<string, string>(LoadFunOptions().ToDict());
-                d["Fun"] = f;
-            }
             d["Saved"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
             return d;
         }
@@ -74,14 +73,14 @@ namespace BF2Coop
             string name = DarkDialog.Input(this, T("Neue Vorlage", "New preset"), T("Name der Vorlage, z. B. „Karkand 16 Bots“ oder „Spaßabend“:", "Name of the preset, e.g. “Karkand 16 bots” or “Fun night”:"), _mod + (_coop ? " Coop" : " Conquest"));
             if (string.IsNullOrEmpty(name) || name.Trim().Length == 0) return;
             int what = DarkDialog.Ask(this, T("Was soll die Vorlage enthalten?", "What should the preset contain?"),
-                T("Einstellungen und Bot-Werte sind immer dabei.\n\n• Mit Rotation: auch Mod, Modus und Map-Liste – Laden wechselt dorthin.\n• Mit Spaßrunde: zusätzlich die Werte der Spaßrunde.", "Settings and bot values are always included.\n\n• With rotation: also mod, mode and map list – loading switches there.\n• With fun round: also the fun round values."),
-                2, false, T("Abbrechen", "Cancel"), T("Nur Einstellungen", "Settings only"), T("Mit Rotation", "With rotation"), T("+ Spaßrunde", "+ fun round")) - 1;
+                T("Einstellungen und Bot-Werte sind immer dabei.\n\nMit Rotation: auch Mod, Modus, Maps und die Spaßregeln pro Map – Laden wechselt dorthin.", "Settings and bot values are always included.\n\nWith rotation: also mod, mode, maps and the fun rules per map – loading switches there."),
+                2, false, T("Abbrechen", "Cancel"), T("Nur Einstellungen", "Settings only"), T("Mit Rotation", "With rotation")) - 1;
             if (what < 0) return;
             string file = PresetFile.PathFor(name);
             if (File.Exists(file) && !DarkDialog.Confirm(this, T("Vorlage ersetzen", "Replace preset"), T("Es gibt schon eine Vorlage „", "A preset “") + name.Trim() + T("“. Ersetzen?", "” already exists. Replace it?"), T("Ersetzen", "Replace"), false)) return;
             try
             {
-                PresetFile.Write(file, PresetSnapshot(what >= 1, what >= 2));
+                PresetFile.Write(file, PresetSnapshot(what >= 1, false));
                 RefreshPresets();
                 Toast(T("Vorlage gespeichert: ", "Preset saved: ") + name.Trim(), ToastKind.Ok);
             }
@@ -129,22 +128,14 @@ namespace BF2Coop
                 object o;
                 bool withMaps = d.ContainsKey("Maps");
                 string hint = null; bool applyMaps = withMaps;
-                if (d.TryGetValue("Fun", out o) && o is Dictionary<string, object>)
-                {
-                    Dictionary<string, string> f = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    foreach (KeyValuePair<string, object> kv in (Dictionary<string, object>)o) f[kv.Key] = Convert.ToString(kv.Value, System.Globalization.CultureInfo.InvariantCulture);
-                    ApplyFunOptions(FunOptions.FromDict(f));
-                }
                 if (withMaps)
                 {
                     string mod = d.TryGetValue("Mod", out o) ? Convert.ToString(o) : _mod;
                     bool coop = !d.TryGetValue("Type", out o) || Convert.ToString(o) != "conquest";
-                    // Spaß-Aufsatz der Vorlage fehlt hier: Rotation beim Basis-Mod übernehmen, Aufsatz neu erstellen lassen
-                    if (!_mods.Contains(mod) && mod.EndsWith("_fun", StringComparison.OrdinalIgnoreCase) && _mods.Contains(mod.Substring(0, mod.Length - 4)))
-                    {
-                        hint = T("Der Spaß-Aufsatz „", "The fun pack “") + mod + T("“ fehlt – unter Optionen › Spaßrunde „Erstellen und verwenden“ drücken.", "” is missing – press “Create and use” under Options › Fun round.");
-                        mod = mod.Substring(0, mod.Length - 4);
-                    }
+                    // Alte Vorlagen (1.4.x) mit Spaß-Aufsatz als Mod: beim Basis-Mod bleiben
+                    string b = FunMods.BaseOf(GameDir, mod);
+                    if (b != null) mod = b;
+                    else if (!_mods.Contains(mod) && mod.EndsWith("_fun", StringComparison.OrdinalIgnoreCase)) mod = mod.Substring(0, mod.Length - 4);
                     if (!_mods.Contains(mod))
                     {
                         hint = T("Mod „", "Mod “") + mod + T("“ ist hier nicht eingerichtet – nur Einstellungen und Bots übernommen.", "” is not set up here – only settings and bots applied.");
@@ -156,18 +147,6 @@ namespace BF2Coop
                 Toast(hint ?? T("Vorlage geladen: ", "Preset loaded: ") + Path.GetFileNameWithoutExtension(file), hint != null ? ToastKind.Warn : ToastKind.Ok);
             }
             catch (Exception ex) { Toast(ex.Message, ToastKind.Error); }
-        }
-
-        void ApplyFunOptions(FunOptions o)
-        {
-            foreach (KeyValuePair<string, string> kv in o.ToDict()) _cfg.Set("Fun." + kv.Key, kv.Value);
-            _cfg.Save();
-            foreach (KeyValuePair<string, Control> kv in _funEd)
-            {
-                string v; if (!o.ToDict().TryGetValue(kv.Key, out v)) continue;
-                if (kv.Value is ToggleSwitch) ((ToggleSwitch)kv.Value).SetSilent(v == "1");
-                else ((NumberBox)kv.Value).SetSilent(Util.ToInt(v, 0));
-            }
         }
 
         // Liste der Vorlagen in der Karte „Standard und Vorlagen“ neu aufbauen

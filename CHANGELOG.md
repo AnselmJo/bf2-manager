@@ -1,4 +1,29 @@
-﻿# Changelog
+# Changelog
+
+## [1.4.2]
+
+Fun rules per map (incl. maps without vehicles), several mods in a row, one-click sync without timeouts, team switch.
+
+### Added
+- **Fun rules per map:** on the Server page every map in the rotation has a *Fun rules* card next to *Bot values* – switch on and change one, several or all rules for exactly this map, quick picks included (C4 only, rocket chaos, sniper duel, floor is lava, all the fun). The manager builds a small pack per rule set by itself and restarts the server only when the next map needs other rules; consecutive maps with the same rules run without a restart. Changeable while the server runs – it applies from the next map.
+- **Several mods in a row:** the *Order* bar above the rotation lists the mods in play order; *Then play another mod* appends one. After a mod's rotation the server restarts with the next mod. Click a mod to edit its rotation, right-click to move or remove it.
+- **In-game announcements:** each new map is announced in chat (with its fun rules), plus every restart for other rules or another mod.
+- **Presets:** saving asks only “settings only” or “with rotation” (the rotation includes the fun rules per map); the dialog is as wide as its buttons.
+- **Game follows the server:** with *Join automatically*, when the server you joined comes back with another mod (other fun rules, next mod), the manager closes Battlefield 2, syncs the new pack and joins again as soon as the map is loaded – the host too, if they play on their own server.
+- **Bot module:** *Settings › Mods* shows its version; an outdated module is replaced right before the next server start; *Team* explains when the module is too old.
+- **Switch team:** *Live › Players* has a *Team* button next to *Kick*. Needs bot module 7 (*Settings › Mods* offers the update).
+- **Fun round – weapon rule:** all classes get only one weapon type (knife, pistol, C4, rocket launcher, sniper rifle, shotgun, machine gun, hand grenades or defibrillator) plus knife and parachute; bots play by the same rules.
+- **Fun round:** C4 for engineer, sniper and anti-tank can be switched separately; rockets and hand grenades have their own force and blast damage (the *Rocket jump* switch is gone – force plus low damage is the rocket jump).
+
+### Removed
+- The global *Fun round* card and the *Evening playlist* card – replaced by fun rules per map and the mod order bar. Old fun packs disappear from the mod list.
+
+### Fixed
+- **Server crashed when a player joined** (“modName to long”): automatic fun packs are called `fun_xxxxxx` – BF2 only accepts short mod names.
+- **Explosive sniper did nothing:** sniper rounds penetrate walls and ground and therefore never exploded. Penetration is now switched off for them, like the exploding cannon rounds of the jets.
+- **Grenade force:** hand grenades keep their own explosion material; force and damage are set directly (default: force 250, damage 10 % = grenade jump).
+- **Sync no longer runs into a timeout:** the first time a server PC is asked for a mod's file list it checks every file (minutes for large mods). It used to hold the request until done, so the player PC gave up and *Join* had to be pressed several times. Now the server PC answers right away with its progress, the player PC shows “The server PC is checking all files … %” and continues by itself. File list and checksum share one calculation, and the server PC prepares the list of the hosted mod in the background as soon as the manager runs.
+- **Sync retries network hiccups:** timeouts and dropped connections are retried up to three times per request and per file; the transfer shows its speed.
 
 ## [1.4.1]
 

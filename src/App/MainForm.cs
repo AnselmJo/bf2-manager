@@ -91,6 +91,16 @@ namespace BF2Coop
             string portable = GameLocator.Portable();
             if (portable != null && !string.Equals(_cfg.S("GameDir", ""), portable, StringComparison.OrdinalIgnoreCase)) { _cfg.Set("GameDir", portable); _cfg.Save(); }
             _mods = _cfg.List("Mods");
+            // Spaß-Aufsätze sind keine eigenen Mods zum Bearbeiten – Regeln stehen jetzt pro Map in der Rotation
+            if (GameLocator.IsGameDir(GameDir))
+            {
+                string last = _cfg.S("LastMod", "");
+                string lb = last.Length > 0 ? FunMods.BaseOf(GameDir, last) : null;
+                if (lb != null) _cfg.Set("LastMod", lb);
+                int before = _mods.Count;
+                _mods.RemoveAll(delegate (string m) { return FunMods.BaseOf(GameDir, m) != null; });
+                if (_mods.Count != before || lb != null) { _cfg.Set("Mods", _mods); _cfg.Save(); }
+            }
             _setupMode = !GameLocator.IsGameDir(GameDir) || _mods.Count == 0;
             if (_mods.Count > 0) { _mod = _cfg.S("LastMod", _mods[0]); if (!_mods.Contains(_mod)) _mod = _mods[0]; }
             _coop = _cfg.S("LastType", "coop") != "conquest";

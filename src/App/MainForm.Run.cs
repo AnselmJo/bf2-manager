@@ -40,19 +40,33 @@ namespace BF2Coop
                 return;
             }
             AutoSaveNow();
+            AutoUpdateModules();   // veraltetes Bot-Modul jetzt ersetzen – der Server läuft gerade nicht
             if (!ValidateStart() || !SaveAll(true)) return;
-            if (StartServerProcess()) { SaveRecent(); _crashed = false; _forceConfig = false; RefreshLive(); SelectPage(PgLive); }
+            if (StartFlow(0)) { SaveRecent(); _crashed = false; _forceConfig = false; RefreshLive(); SelectPage(PgLive); }
         }
 
-        // Startet bf2_w32ded.exe (auch für den Wächter)
+        // Startet bf2_w32ded.exe (auch für den Wächter) – mit dem zuletzt laufenden Aufsatz dieses Mods, sonst dem Mod selbst
         bool StartServerProcess()
+        {
+            return StartServerProcess(_runMod != null && (_runMod == _mod || FunMods.BaseOf(GameDir, _runMod) == _mod) ? _runMod : _mod);
+        }
+
+        // Nach Absturz oder „Neu starten“: im Ablauf an derselben Map weitermachen
+        bool RestartCurrent()
+        {
+            if (FlowActive && _runList.Count > 0) return StartFlow(_runList[Math.Min(_runPos, _runList.Count - 1)]);
+            return StartServerProcess();
+        }
+
+        bool StartServerProcess(string modPath)
         {
             string exe = Path.Combine(GameDir, "bf2_w32ded.exe");
             if (!File.Exists(exe)) { DarkDialog.Info(this, T("Server nicht gefunden", "Server not found"), T("bf2_w32ded.exe fehlt in:\n", "bf2_w32ded.exe missing in:\n") + GameDir); return false; }
             try { foreach (string f in new string[] { "coop_cmd.txt", "coop_live.txt" }) { string p = Path.Combine(ModSettingsDir, f); if (File.Exists(p)) File.Delete(p); } } catch { }
             try
             {
-                ProcessStartInfo psi = new ProcessStartInfo(exe, Srv.Args(_mod, _coop, CfgDir));
+                ProcessStartInfo psi = new ProcessStartInfo(exe, Srv.Args(modPath, _coop, CfgDir));
+                _runMod = modPath;
                 psi.WorkingDirectory = GameDir; psi.UseShellExecute = false;
                 Process p = Process.Start(psi);
                 if (_srvProc != null) _srvProc.Dispose();
@@ -70,7 +84,7 @@ namespace BF2Coop
             if (!join) { StartGame(null, 0, null); return; }
             if (!_running) Toast(T("Hinweis: Der Server läuft noch nicht.", "Note: the server is not running yet."), ToastKind.Warn);
             List<string> ips = Srv.LanAddresses();
-            StartGame(ips.Count > 0 ? ips[0] : "127.0.0.1", Util.ToInt(_vals["sv.serverPort"], 16567), _mod.Length > 0 ? _mod : null);
+            StartGame(ips.Count > 0 ? ips[0] : "127.0.0.1", Util.ToInt(_vals["sv.serverPort"], 16567), _running && _runMod != null ? _runMod : (_mod.Length > 0 ? _mod : null));
         }
 
         // Startet BF2; mit ip wird direkt beigetreten. Der Profilname wird als Auto-Login übergeben.
@@ -103,6 +117,8 @@ namespace BF2Coop
                 a.Append(" +playerName \"").Append(prof.Name ?? prof.Nick).Append("\" +playerPassword \"\"");
             }
             if (ip != null) a.Append(" +joinServer ").Append(ip).Append(" +port ").Append(port);
+            // Merken, wohin und mit welchem Mod beigetreten wurde – wechselt der Server den Mod, folgt der Manager
+            _joinedIp = ip; _joinedMod = ip != null ? mod : null; _joinedAt = DateTime.Now;
             try
             {
                 ProcessStartInfo psi = new ProcessStartInfo(exe, a.ToString());

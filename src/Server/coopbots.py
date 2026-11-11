@@ -3,7 +3,7 @@
 # commands from the app (coop_cmd.txt). No network port, no password.
 # Python 2.3 compatible (BF2 server): no sorted(), no generator expressions,
 # no "with", no "x if y else z", no "except X as e".
-MODULE_VERSION = 6
+MODULE_VERSION = 7
 import time
 import sys
 import host
@@ -470,12 +470,36 @@ def writeLive():
 
 def isAllowed(cmd):
     low = cmd.lower()
-    if cmd == "@nextmap" or cmd == "@reload" or cmd.startswith("@commander "):
+    if cmd == "@nextmap" or cmd == "@reload" or cmd.startswith("@commander ") or cmd.startswith("@team "):
         return 1
     for p in ALLOWED_PREFIXES:
         if low.startswith(p.lower()):
             return 1
     return 0
+
+
+def switchTeam(idx):
+    # Player with this index changes to the other team; a living player respawns there
+    try:
+        for p in bf2.playerManager.getPlayers():
+            if p.index == idx:
+                old = p.getTeam()
+                new = 2
+                if old == 2:
+                    new = 1
+                p.setTeam(new)
+                try:
+                    if p.isAlive():
+                        v = p.getDefaultVehicle()
+                        if v:
+                            v.setDamage(0.0)
+                except:
+                    pass
+                return "team " + str(old) + " -> " + str(new)
+        return "player not found"
+    except:
+        logErr()
+        return "error"
 
 
 def maxCmdId():
@@ -522,6 +546,8 @@ def processCommands():
         elif cmd.startswith("@commander "):
             setCommander(toInt(cmd[11:].strip(), 1), "live")
             res = "ok"
+        elif cmd.startswith("@team "):
+            res = switchTeam(toInt(cmd[6:].strip(), -1))
         else:
             res = runCmd(cmd)
         res = res.replace("\r", "").replace("\n", " | ")

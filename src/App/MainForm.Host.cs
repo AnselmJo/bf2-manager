@@ -1,4 +1,4 @@
-// Hauptfenster: Host-Logik (Rollen, Standard, Zuletzt gestartet, Autospeichern, Startprüfung, laufender Server) - BF2 Manager. C# 5.
+﻿// Hauptfenster: Host-Logik (Rollen, Standard, Zuletzt gestartet, Autospeichern, Startprüfung, laufender Server) - BF2 Manager. C# 5.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -76,12 +76,11 @@ namespace BF2Coop
             _srvHost.Canvas.Controls.Add(_cBehavior); _srvHost.Canvas.Controls.Add(_cStandard);
             HookCollapse(_cBehavior, _srvHost, _srvCards, 2); HookCollapse(_cStandard, _srvHost, _srvCards, 2);
             RefreshPresets();
-            BuildFunCard();
 
             // Hinweisleisten: Konfiguration (Server läuft / Absturz) und Live (reagiert nicht)
             _cfgBanner = new Banner();
             _bCfgAction = new FlatButton("", null, BtnKind.Primary);
-            _bCfgAction.Click += delegate { if (_crashed) { _crashed = false; UpdateServerBanners(); if (StartServerProcess()) SelectPage(PgLive); } else { _forceConfig = false; SelectPage(PgLive); } };
+            _bCfgAction.Click += delegate { if (_crashed) { _crashed = false; UpdateServerBanners(); if (RestartCurrent()) SelectPage(PgLive); } else { _forceConfig = false; SelectPage(PgLive); } };
             FlatButton bCfgDetails = new FlatButton(T("Details", "Details"), null, BtnKind.Ghost);
             bCfgDetails.Click += delegate { ShowServerLog(); };
             _cfgBanner.AddRight(_bCfgAction); _cfgBanner.AddRight(bCfgDetails);
@@ -124,7 +123,7 @@ namespace BF2Coop
             Srv.Kill();
             System.Threading.Thread.Sleep(800);
             _hung = false; _crashed = false;
-            if (StartServerProcess()) Toast(T("Server wird neu gestartet …", "Server is restarting …"), ToastKind.Info);
+            if (RestartCurrent()) Toast(T("Server wird neu gestartet …", "Server is restarting …"), ToastKind.Info);
             UpdateServerBanners();
         }
 
@@ -238,6 +237,7 @@ namespace BF2Coop
         // ================================================================== Automatisch speichern
         void ScheduleSave()
         {
+            if (_shotDir != null) return;   // Testmodus (Screenshots) schreibt nichts
             if (_autoSave == null) { _autoSave = new WinTimer(); _autoSave.Interval = 800; _autoSave.Tick += delegate { _autoSave.Stop(); AutoSaveNow(); }; }
             _autoSave.Stop(); _autoSave.Start();
         }
@@ -264,6 +264,8 @@ namespace BF2Coop
                     try { CmdChannel.Send(ModSettingsDir, d.IsSpecial ? "@commander " + v : d.Key + " " + Defs.ToCon(d, v)); _sentVals[d.Key] = v; } catch { }
                 }
             string sig = RotationSig();
+            // Mit Spaßregeln pro Map oder mehreren Mods steuert der Ablauf die Maplist selbst (Neustart bei Bedarf)
+            if (FlowActive) { _rotSig = sig; return; }
             if (sig != _rotSig && _st.Maps.Count > 0)
             {
                 _rotSig = sig;
