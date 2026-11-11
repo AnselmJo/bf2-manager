@@ -44,7 +44,7 @@ namespace BF2Coop
             foreach (Control c in new Control[] { rAuto, _rowUnlockServer, _lanHostRow, _lanInfo }) _cBehavior.Controls.Add(c);
             _cBehavior.Layouter = Stack(_cBehavior, delegate { return new List<Control> { rAuto, _rowUnlockServer, _lanHostRow, _lanInfo }; });
 
-            _cStandard = MakeCard("srv.standard", T("Standard", "Default"), G.Star, true);
+            _cStandard = MakeCard("srv.standard", T("Standard und Vorlagen", "Default and presets"), G.Star, true);
             Para sInfo = new Para(T("Dein Standard gilt für alle Mods: Servereinstellungen, Bot-Werte pro Mapgröße und anpassende Schwierigkeit. Neue Mods starten damit, „Auf Standard zurücksetzen“ kehrt dorthin zurück. Die Rotation bleibt pro Mod.",
                 "Your default applies to all mods: server settings, bot values per map size and adaptive difficulty. New mods start with it, “Reset to default” returns to it. The rotation stays per mod."));
             sInfo.Color = Theme.Dim;
@@ -55,12 +55,27 @@ namespace BF2Coop
             FlatButton bFactory = new FlatButton(T("Werkseinstellungen", "Factory settings"), null, BtnKind.Ghost);
             bFactory.Click += delegate { ResetToStandard(true); };
             ButtonRow sb = Buttons(bSet, bReset, bFactory);
-            _cStandard.Controls.Add(sInfo); _cStandard.Controls.Add(sb);
-            _cStandard.Layouter = Stack(_cStandard, delegate { return new List<Control> { sInfo, sb }; });
+            Para pInfo = new Para(T("VORLAGEN – beliebig viele gespeicherte Stände zum Vorbereiten, z. B. je eine pro Abendprogramm. Einstellungen und Bots sind immer enthalten, Rotation (mit Mod und Modus) und Spaßrunde wahlweise.",
+                "PRESETS – any number of saved states to prepare ahead, e.g. one per evening programme. Settings and bots are always included, rotation (with mod and mode) and fun round optionally."));
+            pInfo.Color = Theme.Dim;
+            _presetEmpty = new Para(""); _presetEmpty.Color = Theme.Mute;
+            FlatButton bNew = new FlatButton(T("Neue Vorlage …", "New preset …"), G.Save, BtnKind.Primary);
+            Theme.Tip.SetToolTip(bNew, T("Speichert den aktuellen Stand unter einem Namen. Danach fragt der Manager, ob Rotation und Spaßrunde dazugehören.", "Saves the current state under a name. Then the manager asks whether rotation and fun round belong to it."));
+            bNew.Click += delegate { SavePresetAs(); };
+            ButtonRow nb = Buttons(bNew);
+            foreach (Control c in new Control[] { sInfo, sb, pInfo, _presetEmpty, nb }) _cStandard.Controls.Add(c);
+            _cStandard.Layouter = Stack(_cStandard, delegate
+            {
+                List<Control> l = new List<Control> { sInfo, sb, pInfo };
+                if (_presetEmpty.Text.Length > 0) l.Add(_presetEmpty);
+                l.AddRange(_presetRows); l.Add(nb);
+                return l;
+            });
 
             _srvCards.Insert(0, _cStandard); _srvCards.Insert(0, _cBehavior);
             _srvHost.Canvas.Controls.Add(_cBehavior); _srvHost.Canvas.Controls.Add(_cStandard);
             HookCollapse(_cBehavior, _srvHost, _srvCards, 2); HookCollapse(_cStandard, _srvHost, _srvCards, 2);
+            RefreshPresets();
             BuildFunCard();
 
             // Hinweisleisten: Konfiguration (Server läuft / Absturz) und Live (reagiert nicht)
@@ -206,21 +221,18 @@ namespace BF2Coop
             }
             if (rec.Length == 0) { ToolStripMenuItem none = new ToolStripMenuItem(T("   noch nichts", "   nothing yet")); none.Enabled = false; m.Items.Add(none); }
             m.Items.Add(new ToolStripSeparator());
-            ToolStripMenuItem ph = new ToolStripMenuItem(T("Presets", "Presets")); ph.Enabled = false; m.Items.Add(ph);
-            string[] files = Directory.Exists(AppPaths.Presets) ? Directory.GetFiles(AppPaths.Presets, "*.json") : new string[0];
-            Array.Sort(files, StringComparer.OrdinalIgnoreCase);
-            foreach (string f in files)
+            ToolStripMenuItem ph = new ToolStripMenuItem(T("Vorlagen", "Presets")); ph.Enabled = false; m.Items.Add(ph);
+            foreach (string f in PresetFile.All())
             {
                 string file = f, name = Path.GetFileNameWithoutExtension(f);
                 ToolStripMenuItem it = new ToolStripMenuItem("   " + name); it.Click += delegate { LoadPreset(file); };
-                ToolStripMenuItem del = new ToolStripMenuItem(T("Löschen", "Delete"));
-                del.Click += delegate { if (DarkDialog.Confirm(this, T("Preset löschen", "Delete preset"), name, T("Löschen", "Delete"), true)) try { File.Delete(file); } catch { } };
-                it.DropDownItems.Add(del);
                 m.Items.Add(it);
             }
-            ToolStripMenuItem save = new ToolStripMenuItem(T("   Aktuelle Konfiguration als Preset speichern …", "   Save current configuration as preset …"));
-            save.Click += delegate { SavePreset(); };
-            m.Items.Add(save);
+            ToolStripMenuItem save = new ToolStripMenuItem(T("   Aktuellen Stand als Vorlage speichern …", "   Save current state as preset …"));
+            save.Click += delegate { SavePresetAs(); };
+            ToolStripMenuItem manage = new ToolStripMenuItem(T("   Vorlagen verwalten …", "   Manage presets …"));
+            manage.Click += delegate { SelectPage(PgServer); if (_cStandard.Collapsed) _cStandard.Collapsed = false; _srvHost.Masonry(_srvCards, 2); _srvHost.EnsureVisible(_cStandard); };
+            m.Items.Add(save); m.Items.Add(manage);
         }
 
         // ================================================================== Automatisch speichern

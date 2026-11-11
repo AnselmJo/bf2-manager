@@ -66,35 +66,6 @@ namespace BF2Coop
             return d;
         }
 
-        void SavePreset()
-        {
-            string name = DarkDialog.Input(this, T("Preset speichern", "Save preset"), T("Name für die aktuelle Konfiguration (Einstellungen, Bots, Rotation):", "Name for the current configuration (settings, bots, rotation):"), _mod + (_coop ? " Coop" : " Conquest"));
-            if (string.IsNullOrEmpty(name) || name.Trim().Length == 0) return;
-            try
-            {
-                Directory.CreateDirectory(AppPaths.Presets);
-                File.WriteAllText(Path.Combine(AppPaths.Presets, Util.SafeName(name.Trim()) + ".json"), new JavaScriptSerializer().Serialize(Snapshot(true)), new UTF8Encoding(false));
-                Toast(T("Preset gespeichert.", "Preset saved."), ToastKind.Ok);
-            }
-            catch (Exception ex) { Toast(ex.Message, ToastKind.Error); }
-        }
-
-        // Preset oder „Zuletzt gestartet“ laden; bei anderem Mod/Modus wird vorher dorthin gewechselt
-        void LoadPreset(string file)
-        {
-            try
-            {
-                Dictionary<string, object> d = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(File.ReadAllText(file, Encoding.UTF8));
-                object o;
-                string mod = d.TryGetValue("Mod", out o) ? Convert.ToString(o) : _mod;
-                bool coop = !d.TryGetValue("Type", out o) || Convert.ToString(o) != "conquest";
-                if (_mods.Contains(mod) && (mod != _mod || coop != _coop)) { _selMod.SetSilent(mod); _segType.SetSilent(coop ? 0 : 1); SwitchContext(mod, coop); }
-                ApplySnapshot(d, true);
-                Toast(T("Konfiguration geladen.", "Configuration loaded."), ToastKind.Ok);
-            }
-            catch (Exception ex) { Toast(ex.Message, ToastKind.Error); }
-        }
-
         void ApplySnapshot(Dictionary<string, object> d, bool withMaps)
         {
             try

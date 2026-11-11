@@ -1,5 +1,18 @@
 ﻿# Changelog
 
+## [1.4.1]
+
+More fun-round rules, extra explosives that actually show up, and presets you can find.
+
+### Added
+- **Fun round – new rules:** *Water is deadly* (touching water kills, “the floor is lava”), *Explosive sniper* (sniper rounds explode on impact and throw everything nearby; the hit counts as usual), *Grenade jump* (hand grenades throw instead of kill), *Soldier health* in percent (bots included) and a *Defaults* button.
+- **Presets made visible and complete:** the card *Default and presets* (Options) lists all saved presets with *Load*, *Overwrite with current state*, *Rename* and *Delete*; *New preset …* asks whether the rotation (with mod and mode) and the fun round belong to it. Loading a preset without rotation keeps the current mod. Header button renamed to *Recent & presets*.
+- **Fun round:** rocket force and rocket reload in milliseconds (100 = 0.1 s) are adjustable; *Vehicle turbo* raises the engine power of cars and tanks (200 % = double); *C4 for more classes* gives engineer, sniper and anti-tank C4 on key 5.
+
+### Fixed
+- **Fun round: extra explosives were missing in the kit** (Windows line ends in kit files). Spec Ops now has C4 on 5, jump claymore on 6 and mega mine on 7 – before, all three shared key 5, so only C4 was reachable.
+- **Fun round: no crash from key clashes:** two items on the same key in one kit make the server quit. The manager now only uses keys that are free in every affected kit; where none is free (e.g. `bf2sf64`, whose kits use 6–8 for grappling hook, night vision and gas mask) the extras are left out. Tested with `bf2all64`, `bf2sf64` and `bfp2`.
+
 ## [1.4.0]
 
 One click to join – the manager brings missing mod files along – plus a fun round for party nights.

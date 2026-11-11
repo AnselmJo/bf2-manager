@@ -34,8 +34,8 @@ namespace BF2Coop
             PageHeader ph = NewPage(2, "Server", T("Rotation zusammenstellen, Bots pro Map einstellen, oben „Server starten“", "Build the rotation, set bots per map, then “Start server” at the top"));
             ContextMenuStrip cfgMenu = Theme.Menu();
             cfgMenu.Opening += delegate { BuildConfigMenu(cfgMenu); };
-            FlatButton bRecent = new FlatButton(T("Zuletzt & Presets", "Recent & presets"), G.Refresh, BtnKind.Secondary); bRecent.DropMenu = cfgMenu; bRecent.MenuOnly = true; bRecent.Fit();
-            Theme.Tip.SetToolTip(bRecent, T("Zuletzt gestartete Konfigurationen wieder laden oder Presets verwalten.", "Reload recently started configurations or manage presets."));
+            FlatButton bRecent = new FlatButton(T("Zuletzt & Vorlagen", "Recent & presets"), G.Refresh, BtnKind.Secondary); bRecent.DropMenu = cfgMenu; bRecent.MenuOnly = true; bRecent.Fit();
+            Theme.Tip.SetToolTip(bRecent, T("Zuletzt gestartete Konfigurationen wieder laden, Vorlagen laden oder speichern.", "Reload recently started configurations, load or save presets."));
             ph.AddRight(bRecent);
             _mapsBody = new BufferedPanel(); _mapsBody.Dock = DockStyle.Fill; _mapsBody.BackColor = Theme.Bg;
             Dock3(_pages[2], ph, null, _mapsBody);

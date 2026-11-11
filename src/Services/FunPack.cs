@@ -1,4 +1,4 @@
-// Spaß-Aufsatz bauen: mods/<Basis>_fun mit geänderten Waffen-, Soldaten- und Materialwerten - BF2 Manager. C# 5 (.NET Framework 4.x).
+﻿// Spaß-Aufsatz bauen: mods/<Basis>_fun mit geänderten Waffen-, Soldaten- und Materialwerten - BF2 Manager. C# 5 (.NET Framework 4.x).
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -16,19 +16,25 @@ namespace BF2Coop
         public int C4Force = 300;               // Wucht der C4-Explosion (Original 17)
         public bool NoFallDamage = true;
         public int BlastSoldierPct = 2;         // Schaden von C4 und Spaß-Explosionen an Soldaten in % (Original 100)
-        public bool ExtraExplosives = true;     // Spec Ops bekommt zusätzlich Mega-Mine und Sprung-Claymore
+        public bool ExtraExplosives = true;     // Spec Ops: zusätzlich Sprung-Claymore (Taste 6) und Mega-Mine (Taste 7)
+        public bool C4ForMore = true;           // C4 auch für Pionier, Scharfschütze und Panzerabwehr (Taste 5)
         public int MineForce = 2500;            // Panzermine: wirft Fahrzeuge (Original 10)
         public int ClaymoreForce = 300;         // Claymore: Sprungfalle für Soldaten (Original 7)
         public bool RocketJump = true;          // Panzerfaust-Explosion schiebt stark, verletzt Soldaten kaum (Volltreffer zählt weiter)
         public int RocketForce = 250;           // (Original 7)
         public int RocketSpeedPct = 25;         // Raketen-Höchsttempo in % (100 = normal; klein = ausweichbar)
         public int RocketMags = 50;             // Raketen pro Spieler (Original 5–6)
-        public bool FastReload = true;          // Nachladen der Panzerfaust fast ohne Wartezeit
+        public int RocketReloadMs = 300;        // Nachladezeit der Panzerfaust in ms (0 = unverändert, Original 3000)
         public bool EndlessAmmo = true;         // alle Handwaffen: 99 Magazine
         public bool EndlessSprint = true;
         public int GravityPct = 60;             // Schwerkraft in % (100 = normal, 60 = hohe Sprünge, 40 = Mond)
+        public int VehiclePowerPct = 200;       // Motorkraft der Landfahrzeuge in % (100 = normal) – „Turbo“
+        public bool WaterKills = false;         // Soldaten sterben bei Berührung mit Wasser („Der Boden ist Lava“)
+        public int SniperForce = 300;           // Explosiv-Sniper: Einschlag schleudert (0 = aus); Treffer zählen weiter normal
+        public int GrenadeForce = 0;            // Granaten-Sprung: Wucht der Handgranaten, verletzen dann kaum (0 = aus, Original 5)
+        public int HealthPct = 100;             // Lebenspunkte aller Soldaten (auch Bots) in % (100 = normal)
 
-        static readonly string[] Keys = { "C4Mags", "C4Force", "NoFallDamage", "BlastSoldierPct", "ExtraExplosives", "MineForce", "ClaymoreForce", "RocketJump", "RocketForce", "RocketSpeedPct", "RocketMags", "FastReload", "EndlessAmmo", "EndlessSprint", "GravityPct" };
+        static readonly string[] Keys = { "HealthPct", "C4Mags", "C4Force", "NoFallDamage", "BlastSoldierPct", "ExtraExplosives", "C4ForMore", "MineForce", "ClaymoreForce", "RocketJump", "RocketForce", "RocketSpeedPct", "RocketMags", "RocketReloadMs", "EndlessAmmo", "EndlessSprint", "GravityPct", "VehiclePowerPct", "WaterKills", "SniperForce", "GrenadeForce" };
 
         public Dictionary<string, string> ToDict()
         {
@@ -149,6 +155,98 @@ namespace BF2Coop
 
         static string F(double v) { return v.ToString("0.###", CultureInfo.InvariantCulture); }
 
+        // Fügt Text hinter der ersten addTemplate-Zeile (bzw. der für template) ein – auch bei Windows-Zeilenenden
+        public static string AddAfter(string kit, string template, string add)
+        {
+            Regex rx = new Regex(@"(?mi)^(ObjectTemplate\.addTemplate[ \t]+" + (template == null ? @"[^\s]+" : Regex.Escape(template)) + @")(?=[ \t]*\r?$)");
+            return rx.Replace(kit, "${1}" + add.Replace("$", "$$"), 1);
+        }
+
+        // Zeilen direkt hinter "ObjectTemplate.create <Typ> <template>" einfügen (oder hinter einer Zeile after in diesem Abschnitt)
+        public static string AddAfterCreate(string text, string template, string lines, string after = null)
+        {
+            Match start = Regex.Match(text, @"(?mi)^ObjectTemplate\.(?:create|activeSafe)\s+\S+\s+" + Regex.Escape(template) + @"(?=[ \t]*\r?$)");
+            if (!start.Success) return text;
+            int at = start.Index + start.Length;
+            if (after != null)
+            {
+                string sec = Section(text, template) ?? "";
+                Match a = Regex.Match(sec, @"(?mi)^" + Regex.Escape(after) + @"(?=[ \t]*\r?$)");
+                if (a.Success) at = text.IndexOf(sec, start.Index, StringComparison.Ordinal) + a.Index + a.Length;
+            }
+            return text.Substring(0, at) + Nl(text) + lines + text.Substring(at);
+        }
+
+        // Taste (itemIndex) jeder Handwaffe bzw. jedes Gegenstands, wie das Spiel sie sieht
+        static Dictionary<string, int> ItemSlots(Reader rd)
+        {
+            Dictionary<string, int> r = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, string> w in rd.Find("Objects", new Regex(@"^Weapons/Handheld/[^/]+/[^/]+\.tweak$", RegexOptions.IgnoreCase)))
+                foreach (Match m in Regex.Matches(w.Value, @"(?mi)^ObjectTemplate\.(?:create|activeSafe)\s+\S+\s+(\S+?)(?=[ \t]*\r?$)"))
+                {
+                    string sec = Section(w.Value, m.Groups[1].Value);
+                    Match ix = sec == null ? Match.Empty : Regex.Match(sec, @"(?mi)^ObjectTemplate\.itemIndex\s+(\d+)");
+                    if (ix.Success && !r.ContainsKey(m.Groups[1].Value)) r[m.Groups[1].Value] = int.Parse(ix.Groups[1].Value);
+                }
+            return r;
+        }
+
+        public static List<string> KitItems(string kit)
+        {
+            List<string> r = new List<string>();
+            foreach (Match m in Regex.Matches(kit, @"(?mi)^ObjectTemplate\.addTemplate[ \t]+([^\s]+)")) r.Add(m.Groups[1].Value);
+            return r;
+        }
+
+        static bool Has(List<string> items, string name) { foreach (string s in items) if (s.Equals(name, StringComparison.OrdinalIgnoreCase)) return true; return false; }
+
+        // Belegte Tasten eines Kits (ohne ignore)
+        public static List<int> UsedKeys(List<string> items, Dictionary<string, int> slot, string ignore)
+        {
+            List<int> r = new List<int>(); int k;
+            foreach (string s in items) if ((ignore == null || !s.Equals(ignore, StringComparison.OrdinalIgnoreCase)) && slot.TryGetValue(s, out k)) r.Add(k);
+            return r;
+        }
+
+        // Taste, die in allen Pflicht-Kits frei ist und in möglichst vielen optionalen Kits; -1 = keine
+        public static int BestKey(int[] candidates, string item, List<string> must, List<string> optional, Dictionary<string, List<string>> kitItems, Dictionary<string, int> slot, int exclude)
+        {
+            int best = -1, bestN = -1;
+            foreach (int c in candidates)
+            {
+                if (c == exclude || FreeKey(new int[] { c }, item, must, kitItems, slot, -1) < 0) continue;
+                int n = 0; foreach (string k in optional) if (UsedKeys(kitItems[k], slot, item).IndexOf(c) < 0) n++;
+                if (n > bestN) { best = c; bestN = n; }
+            }
+            // Ohne Gewinn (kein optionales Kit frei) nicht verschieben
+            return bestN > 0 || optional.Count == 0 && must.Count > 0 && best > 0 ? best : -1;
+        }
+
+        // Erste Taste aus candidates, die in allen Ziel-Kits frei ist (außer exclude); -1 = keine
+        public static int FreeKey(int[] candidates, string item, List<string> kits, Dictionary<string, List<string>> kitItems, Dictionary<string, int> slot, int exclude)
+        {
+            foreach (int c in candidates)
+            {
+                if (c == exclude) continue;
+                bool ok = true;
+                foreach (string k in kits) if (UsedKeys(kitItems[k], slot, item).IndexOf(c) >= 0) { ok = false; break; }
+                if (ok) return c;
+            }
+            return -1;
+        }
+
+        static double Num(string s) { return double.Parse(s, CultureInfo.InvariantCulture); }
+
+        // Text des Abschnitts einer Vorlage (bis zur nächsten), sonst null
+        public static string Section(string text, string template)
+        {
+            Match start = Regex.Match(text, @"(?mi)^ObjectTemplate\.(create|activeSafe)\s+\S+\s+" + Regex.Escape(template) + @"\s*$");
+            if (!start.Success) return null;
+            int from = start.Index + start.Length;
+            Match next = Regex.Match(text.Substring(from), @"(?mi)^ObjectTemplate\.(create|activeSafe)\s+\S+\s+\S+");
+            return text.Substring(from, next.Success ? next.Index : text.Length - from);
+        }
+
         // Baut mods/<Basis>_fun neu. Ordner werden als Verknüpfung (Junction) auf den Basis-Mod angelegt.
         public static List<string> Build(string gameDir, string baseMod, FunOptions o)
         {
@@ -174,39 +272,85 @@ namespace BF2Coop
                     obj[real] = c4; log.Add(I18n.T("C4: ", "C4: ") + o.C4Mags + I18n.T(" Stück, Wucht ", " per player, force ") + o.C4Force);
                 }
                 else log.Add(I18n.T("⚠ C4 nicht gefunden", "⚠ C4 not found"));
-                // ---- Zusätzliche Sprengsätze für Spec Ops: Panzermine (wirft Fahrzeuge) und Claymore (Sprungfalle)
-                if (o.ExtraExplosives)
+                // ---- Sprengsätze: jede Art auf eine eigene, im Kit freie Taste. Zwei Gegenstände auf derselben Taste
+                // im selben Kit lassen den Server abstürzen (bf2sf64 belegt 6–8 mit Enterhaken, Nachtsicht, Gasmaske).
+                // Neue Waffen-Vorlagen lädt BF2 nicht aus zusätzlichen Dateien, daher vorhandene: C4, Claymore, Panzermine.
+                if (o.ExtraExplosives || o.C4ForMore)
                 {
-                    string mine = rd.Read("Objects", "Weapons/Handheld/at_mine/at_mine.tweak", out real);
+                    string mine = rd.Read("Objects", "Weapons/Handheld/at_mine/at_mine.tweak", out real); string mineReal = real;
+                    string clay = rd.Read("Objects", "Weapons/Handheld/usmin_claymore/usmin_claymore.tweak", out real); string clayReal = real;
+                    Dictionary<string, int> slot = ItemSlots(rd);
+                    List<KeyValuePair<string, string>> kitFiles = rd.Find("Objects", new Regex(@"^Kits/.*\.con$", RegexOptions.IgnoreCase));
+                    Dictionary<string, List<string>> kitItems = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+                    foreach (KeyValuePair<string, string> k in kitFiles) kitItems[k.Key] = KitItems(k.Value);
+                    List<string> spec = new List<string>(), withClay = new List<string>(), withMine = new List<string>();
+                    foreach (KeyValuePair<string, List<string>> k in kitItems)
+                    {
+                        if (Has(k.Value, "c4_explosives")) spec.Add(k.Key);
+                        if (Has(k.Value, "usmin_claymore")) withClay.Add(k.Key);
+                        if (Has(k.Value, "at_mine")) withMine.Add(k.Key);
+                    }
+                    // Claymore: freie Taste in allen Kits, die sie haben bzw. bekommen
+                    int clayKey = -1, mineKey = -1;
+                    List<string> clayTarget = new List<string>(withClay); if (o.ExtraExplosives && clay != null) foreach (string s in spec) if (!clayTarget.Contains(s)) clayTarget.Add(s);
+                    if (clay != null) clayKey = BestKey(new int[] { 6, 7, 8 }, "usmin_claymore", withClay, o.ExtraExplosives ? spec : new List<string>(), kitItems, slot, -1);
+                    if (clayKey < 0 && clay != null) { clayTarget = withClay; }
+                    else if (clay != null) slot["usmin_claymore"] = clayKey;
+                    List<string> mineTarget = new List<string>(withMine); if (o.ExtraExplosives && mine != null) foreach (string s in spec) if (!mineTarget.Contains(s)) mineTarget.Add(s);
+                    if (mine != null) mineKey = BestKey(new int[] { 7, 6, 8 }, "at_mine", withMine, o.ExtraExplosives ? spec : new List<string>(), kitItems, slot, clayKey);
+                    if (mineKey < 0 && mine != null) { mineTarget = withMine; }
+                    else if (mine != null) slot["at_mine"] = mineKey;
                     if (mine != null)
                     {
-                        mine = SetInTemplate(mine, "at_mine_Projectile", "detonation.explosionForce", o.MineForce.ToString(), null);
-                        mine = SetInTemplate(mine, "at_mine_Projectile", "detonation.explosionRadius", "12", null);
-                        mine = SetInTemplate(mine, "at_mine", "ammo.nrOfMags", "10", "ammo.magSize");
-                        obj[real] = mine;
+                        if (mineKey > 0) mine = SetInTemplate(mine, "at_mine", "itemIndex", mineKey.ToString(), null);
+                        if (o.ExtraExplosives)
+                        {
+                            mine = SetInTemplate(mine, "at_mine_Projectile", "detonation.explosionForce", o.MineForce.ToString(), null);
+                            mine = SetInTemplate(mine, "at_mine_Projectile", "detonation.explosionRadius", "12", null);
+                            mine = SetInTemplate(mine, "at_mine", "ammo.nrOfMags", "10", "ammo.magSize");
+                        }
+                        obj[mineReal] = mine;
                     }
-                    string clay = rd.Read("Objects", "Weapons/Handheld/usmin_claymore/usmin_claymore.tweak", out real);
                     if (clay != null)
                     {
-                        clay = SetInTemplate(clay, "usmin_claymore_Projectile", "detonation.explosionForce", o.ClaymoreForce.ToString(), null);
-                        clay = SetInTemplate(clay, "usmin_claymore_Projectile", "detonation.explosionMaterial", C4Material.ToString(), null);
-                        clay = SetInTemplate(clay, "usmin_claymore", "ammo.nrOfMags", "10", "ammo.magSize");
-                        clay = SetInTemplate(clay, "usmin_claymore", "fire.maxProjectilesInWorld", "10", null);
-                        obj[real] = clay;
+                        if (clayKey > 0) clay = SetInTemplate(clay, "usmin_claymore", "itemIndex", clayKey.ToString(), null);
+                        if (o.ExtraExplosives)
+                        {
+                            clay = SetInTemplate(clay, "usmin_claymore_Projectile", "detonation.explosionForce", o.ClaymoreForce.ToString(), null);
+                            clay = SetInTemplate(clay, "usmin_claymore_Projectile", "detonation.explosionMaterial", C4Material.ToString(), null);
+                            clay = SetInTemplate(clay, "usmin_claymore", "ammo.nrOfMags", "10", "ammo.magSize");
+                            clay = SetInTemplate(clay, "usmin_claymore", "fire.maxProjectilesInWorld", "10", null);
+                        }
+                        obj[clayReal] = clay;
                     }
-                    int kits = 0;
-                    foreach (KeyValuePair<string, string> k in rd.Find("Objects", new Regex(@"^Kits/.*\.con$", RegexOptions.IgnoreCase)))
+                    int kits = 0, more = 0;
+                    foreach (KeyValuePair<string, string> k in kitFiles)
                     {
-                        string t = k.Value;
-                        if (!Regex.IsMatch(t, @"(?mi)^ObjectTemplate\.addTemplate\s+c4_explosives\s*$")) continue;
-                        string add = "";
-                        if (mine != null && !Regex.IsMatch(t, @"(?mi)^ObjectTemplate\.addTemplate\s+at_mine\s*$")) add += Nl(t) + "ObjectTemplate.addTemplate at_mine";
-                        if (clay != null && !Regex.IsMatch(t, @"(?mi)^ObjectTemplate\.addTemplate\s+usmin_claymore\s*$")) add += Nl(t) + "ObjectTemplate.addTemplate usmin_claymore";
-                        if (add.Length == 0) continue;
-                        obj[k.Key] = new Regex(@"(?mi)^(ObjectTemplate\.addTemplate\s+c4_explosives)[ \t]*$").Replace(t, "${1}" + add, 1);
-                        kits++;
+                        string t = k.Value, nl = Nl(t);
+                        List<string> items = kitItems[k.Key];
+                        if (spec.Contains(k.Key))
+                        {
+                            if (!o.ExtraExplosives) continue;
+                            string add = "";
+                            bool addClay = clayKey > 0 && !Has(items, "usmin_claymore") && UsedKeys(items, slot, "usmin_claymore").IndexOf(clayKey) < 0;
+                            if (addClay) add += nl + "ObjectTemplate.addTemplate usmin_claymore";
+                            if (mineKey > 0 && !Has(items, "at_mine") && UsedKeys(items, slot, "at_mine").IndexOf(mineKey) < 0 && !(addClay && clayKey == mineKey)) add += nl + "ObjectTemplate.addTemplate at_mine";
+                            if (add.Length == 0) continue;
+                            obj[k.Key] = AddAfter(t, "c4_explosives", add);
+                            kits++;
+                        }
+                        else if (o.C4ForMore && Regex.IsMatch(Path.GetFileName(k.Key), @"_(engineer|sniper|at)(_special)?\.con$", RegexOptions.IgnoreCase)
+                                 && UsedKeys(items, slot, null).IndexOf(5) < 0)
+                        {
+                            string nt = AddAfter(t, null, nl + "ObjectTemplate.addTemplate c4_explosives");
+                            if (nt == t) continue;
+                            obj[k.Key] = nt; more++;
+                        }
                     }
-                    log.Add(I18n.T("Spec Ops: zusätzlich Mega-Mine (Wucht ", "Spec Ops: also mega mine (force ") + o.MineForce + I18n.T(") und Sprung-Claymore (Wucht ", ") and jump claymore (force ") + o.ClaymoreForce + ") – " + kits + " Kits");
+                    if (o.ExtraExplosives) log.Add(I18n.T("Spec Ops: C4 auf Taste 5", "Spec Ops: C4 on key 5")
+                        + (clayKey > 0 ? I18n.T(", Sprung-Claymore auf ", ", jump claymore on ") + clayKey : I18n.T(", Claymore: keine freie Taste", ", claymore: no free key"))
+                        + (mineKey > 0 ? I18n.T(", Mega-Mine auf ", ", mega mine on ") + mineKey : I18n.T(", Mine: keine freie Taste", ", mine: no free key")) + " – " + kits + " Kits");
+                    if (o.C4ForMore) log.Add(I18n.T("C4 auch für Pionier, Scharfschütze und Panzerabwehr – ", "C4 also for engineer, sniper and anti-tank – ") + more + I18n.T(" Kits (nur wo Taste 5 frei ist)", " kits (only where key 5 is free)"));
                 }
                 // ---- Panzerfaust: Raketensprung, langsame Raketen, viele Raketen, schnelles Nachladen
                 if (o.RocketJump || o.RocketSpeedPct != 100)
@@ -234,9 +378,14 @@ namespace BF2Coop
                 {
                     string p = "Weapons/Handheld/" + ln + "/" + ln + ".tweak";
                     string t = rd.Read("Objects", p, out real);
-                    if (t == null || (o.RocketMags <= 0 && !o.FastReload && o.RocketSpeedPct == 100)) continue;
+                    if (t == null || (o.RocketMags <= 0 && o.RocketReloadMs <= 0 && o.RocketSpeedPct == 100)) continue;
                     if (o.RocketMags > 0) t = SetInTemplate(t, ln, "ammo.nrOfMags", o.RocketMags.ToString(), "ammo.magSize");
-                    if (o.FastReload) { t = SetInTemplate(t, ln, "ammo.reloadTime", "0.3", null); t = SetInTemplate(t, ln, "ammo.minimumTimeUntilReload", "0.2", null); }
+                    if (o.RocketReloadMs > 0)
+                    {
+                        double s = o.RocketReloadMs / 1000.0;
+                        t = SetInTemplate(t, ln, "ammo.reloadTime", F(s), null);
+                        t = SetInTemplate(t, ln, "ammo.minimumTimeUntilReload", F(Math.Min(s, 0.2)), null);
+                    }
                     if (o.RocketSpeedPct > 0 && o.RocketSpeedPct != 100)
                     {
                         Match mv = Regex.Match(t, @"(?mi)^ObjectTemplate\.velocity\s+([\d.]+)");
@@ -244,8 +393,28 @@ namespace BF2Coop
                     }
                     obj[real] = t;
                 }
-                if (o.RocketJump || o.RocketSpeedPct != 100 || o.RocketMags > 0 || o.FastReload)
-                    log.Add(I18n.T("Panzerfaust: ", "Rocket launcher: ") + (o.RocketJump ? I18n.T("Raketensprung (Wucht ", "rocket jump (force ") + o.RocketForce + "), " : "") + I18n.T("Tempo ", "speed ") + o.RocketSpeedPct + " %, " + o.RocketMags + I18n.T(" Raketen", " rockets") + (o.FastReload ? I18n.T(", schnelles Nachladen", ", fast reload") : ""));
+                if (o.RocketJump || o.RocketSpeedPct != 100 || o.RocketMags > 0 || o.RocketReloadMs > 0)
+                    log.Add(I18n.T("Panzerfaust: ", "Rocket launcher: ") + (o.RocketJump ? I18n.T("Raketensprung (Wucht ", "rocket jump (force ") + o.RocketForce + "), " : "") + I18n.T("Tempo ", "speed ") + o.RocketSpeedPct + " %, " + o.RocketMags + I18n.T(" Raketen", " rockets") + (o.RocketReloadMs > 0 ? I18n.T(", Nachladen ", ", reload ") + F(o.RocketReloadMs / 1000.0) + " s" : ""));
+                // ---- Turbo: Motorkraft der Landfahrzeuge (Autos und Panzer); Höchstdrehzahl steigt halb so stark mit
+                if (o.VehiclePowerPct > 0 && o.VehiclePowerPct != 100)
+                {
+                    double f = o.VehiclePowerPct / 100.0, fr = 1 + (f - 1) / 2; int n = 0;
+                    foreach (KeyValuePair<string, string> v in rd.Find("Objects", new Regex(@"^Vehicles/Land/[^/]+/[^/]+\.tweak$", RegexOptions.IgnoreCase)))
+                    {
+                        string t = v.Value;
+                        foreach (Match em in Regex.Matches(v.Value, @"(?mi)^ObjectTemplate\.(?:create|activeSafe)\s+Engine\s+(\S+)\s*$"))
+                        {
+                            string sec = Section(t, em.Groups[1].Value);
+                            if (sec == null || !Regex.IsMatch(sec, @"(?mi)^ObjectTemplate\.setEngineType\s+c_ET(NewCar2|Tank|Car)\b")) continue;
+                            Match tq = Regex.Match(sec, @"(?mi)^ObjectTemplate\.setTorque\s+([\d.]+)"), rpm = Regex.Match(sec, @"(?mi)^ObjectTemplate\.newCar2\.maxRpm\s+([\d.]+)");
+                            if (tq.Success) t = SetInTemplate(t, em.Groups[1].Value, "setTorque", F(Num(tq.Groups[1].Value) * f), null);
+                            if (rpm.Success) t = SetInTemplate(t, em.Groups[1].Value, "newCar2.maxRpm", F(Num(rpm.Groups[1].Value) * fr), null);
+                            if (tq.Success) n++;
+                        }
+                        if (t != v.Value) obj[v.Key] = t;
+                    }
+                    log.Add(I18n.T("Turbo: ", "Turbo: ") + n + I18n.T(" Fahrzeugmotoren mit ", " vehicle engines at ") + o.VehiclePowerPct + I18n.T(" % Kraft", " % power"));
+                }
                 // ---- Fast unendlich Munition: alle Handwaffen 99 Magazine (C4 und Panzerfaust behalten ihre eigenen Werte)
                 if (o.EndlessAmmo)
                 {
@@ -257,7 +426,7 @@ namespace BF2Coop
                         if (!fa.Success || !Regex.IsMatch(t, @"(?mi)^ObjectTemplate\.createComponent\s+DefaultAmmoComp")) continue;
                         string nm = fa.Groups[1].Value.ToLowerInvariant();
                         if (nm == "c4_explosives" || Array.IndexOf(Launchers, nm) >= 0) continue;
-                        if (o.ExtraExplosives && (nm == "at_mine" || nm == "usmin_claymore")) continue;
+                        if ((o.ExtraExplosives || o.C4ForMore) && (nm == "at_mine" || nm == "usmin_claymore")) continue;
                         Match cur = Regex.Match(t, @"(?mi)^ObjectTemplate\.ammo\.nrOfMags\s+(\d+)");
                         if (cur.Success && int.Parse(cur.Groups[1].Value) >= 99) continue;
                         // Viele Waffen setzen magSize nicht (Standardwert) – dann nach ammoType bzw. reloadTime einfügen
@@ -267,6 +436,55 @@ namespace BF2Coop
                         if (nt != t) { obj[w.Key] = nt; n++; }
                     }
                     log.Add(I18n.T("Munition: ", "Ammo: ") + n + I18n.T(" Handwaffen mit 99 Magazinen", " hand weapons with 99 magazines"));
+                }
+                // ---- Explosiv-Sniper: Geschosse der Scharfschützen-Waffen explodieren beim Einschlag und schleudern
+                if (o.SniperForce > 0)
+                {
+                    HashSet<string> sn = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (KeyValuePair<string, string> k in rd.Find("Objects", new Regex(@"^Kits/.*_sniper\.con$", RegexOptions.IgnoreCase)))
+                        foreach (Match m in Regex.Matches(k.Value, @"(?mi)^ObjectTemplate\.addTemplate[ \t]+([^\s]+)")) sn.Add(m.Groups[1].Value);
+                    int n = 0;
+                    foreach (KeyValuePair<string, string> w in rd.Find("Objects", new Regex(@"^Weapons/Handheld/[^/]+/[^/]+\.tweak$", RegexOptions.IgnoreCase)))
+                    {
+                        string t = obj.ContainsKey(w.Key) ? obj[w.Key] : w.Value;
+                        Match fa = Regex.Match(t, @"(?mi)^ObjectTemplate\.(?:create|activeSafe)\s+GenericFireArm\s+(\S+)");
+                        if (!fa.Success || !sn.Contains(fa.Groups[1].Value) || Regex.IsMatch(fa.Groups[1].Value, "claymore|knife|pis|hgr|simrad", RegexOptions.IgnoreCase)) continue;
+                        foreach (Match pm in Regex.Matches(t, @"(?mi)^ObjectTemplate\.create\s+GenericProjectile\s+(\S+)\s*$"))
+                        {
+                            string pn = pm.Groups[1].Value, sec = Section(t, pn);
+                            if (sec == null) continue;
+                            if (!Regex.IsMatch(sec, @"(?mi)^ObjectTemplate\.createComponent\s+DefaultDetonationComp")) t = AddAfterCreate(t, pn, "ObjectTemplate.createComponent DefaultDetonationComp");
+                            string[][] vals = { new[] { "explosionMaterial", C4Material.ToString() }, new[] { "explosionRadius", "4" }, new[] { "explosionForce", o.SniperForce.ToString() }, new[] { "explosionDamage", "50" }, new[] { "endEffectTemplate", "e_exp_grenade" } };
+                            string missing = "";
+                            foreach (string[] kv in vals)
+                            {
+                                if (Regex.IsMatch(Section(t, pn), @"(?mi)^ObjectTemplate\.detonation\." + kv[0] + @"\s")) t = SetInTemplate(t, pn, "detonation." + kv[0], kv[1], null);
+                                else missing += (missing.Length > 0 ? Nl(t) : "") + "ObjectTemplate.detonation." + kv[0] + " " + kv[1];
+                            }
+                            if (missing.Length > 0) t = AddAfterCreate(t, pn, missing, "ObjectTemplate.createComponent DefaultDetonationComp");
+                            n++;
+                        }
+                        obj[w.Key] = t;
+                    }
+                    log.Add(I18n.T("Explosiv-Sniper: ", "Explosive sniper: ") + n + I18n.T(" Geschosse, Wucht ", " projectiles, force ") + o.SniperForce);
+                }
+                // ---- Granaten-Sprung: Handgranaten schleudern statt zu töten
+                if (o.GrenadeForce > 0)
+                {
+                    int n = 0;
+                    foreach (KeyValuePair<string, string> w in rd.Find("Objects", new Regex(@"^Weapons/Handheld/[^/]*hgr[^/]*/[^/]+\.tweak$", RegexOptions.IgnoreCase)))
+                    {
+                        if (Regex.IsMatch(w.Key, "smoke|flash", RegexOptions.IgnoreCase)) continue;
+                        string t = obj.ContainsKey(w.Key) ? obj[w.Key] : w.Value;
+                        foreach (Match pm in Regex.Matches(t, @"(?mi)^ObjectTemplate\.create\s+GenericProjectile\s+(\S+)\s*$"))
+                        {
+                            t = SetInTemplate(t, pm.Groups[1].Value, "detonation.explosionForce", o.GrenadeForce.ToString(), null);
+                            t = SetInTemplate(t, pm.Groups[1].Value, "detonation.explosionMaterial", C4Material.ToString(), null);
+                            n++;
+                        }
+                        obj[w.Key] = t;
+                    }
+                    log.Add(I18n.T("Granaten-Sprung: ", "Grenade jump: ") + n + I18n.T(" Granaten, Wucht ", " grenades, force ") + o.GrenadeForce);
                 }
                 // ---- Sprinten ohne Ausdauer
                 if (o.EndlessSprint)
@@ -286,6 +504,37 @@ namespace BF2Coop
                         obj[k.Key] = SetValue(t, "sprintStaminaDissipationFactor", "0", null);
                     }
                     log.Add(I18n.T("Sprinten ohne Ausdauer (", "Sprint without stamina (") + n + I18n.T(" Soldaten)", " soldiers)"));
+                }
+                // ---- Lebenspunkte der Soldaten
+                if (o.HealthPct > 0 && o.HealthPct != 100)
+                {
+                    int n = 0;
+                    foreach (KeyValuePair<string, string> s in rd.Find("Objects", new Regex(@"^soldiers/[^/]+/[^/]+\.tweak$", RegexOptions.IgnoreCase)))
+                    {
+                        string t = obj.ContainsKey(s.Key) ? obj[s.Key] : s.Value;
+                        Match mh = Regex.Match(t, @"(?mi)^ObjectTemplate\.armor\.maxHitPoints\s+([\d.]+)");
+                        if (!mh.Success) continue;
+                        string hp = F(Math.Round(Num(mh.Groups[1].Value) * o.HealthPct / 100.0));
+                        t = SetValue(t, "armor.maxHitPoints", hp, null);
+                        t = SetValue(t, "armor.hitPoints", hp, null);
+                        obj[s.Key] = t; n++;
+                    }
+                    log.Add(I18n.T("Lebenspunkte: ", "Health: ") + o.HealthPct + " % (" + n + I18n.T(" Soldaten)", " soldiers)"));
+                }
+                // ---- Wasser tötet: Soldaten verlieren sofort alle Lebenspunkte, sobald sie Wasser berühren
+                if (o.WaterKills)
+                {
+                    int n = 0;
+                    foreach (KeyValuePair<string, string> s in rd.Find("Objects", new Regex(@"^soldiers/[^/]+/[^/]+\.tweak$", RegexOptions.IgnoreCase)))
+                    {
+                        string t = obj.ContainsKey(s.Key) ? obj[s.Key] : s.Value;
+                        if (!Regex.IsMatch(t, @"(?mi)^ObjectTemplate\.armor\.maxHitPoints")) continue;
+                        t = SetValue(t, "armor.hpLostWhileInWater", "1000", "armor.maxHitPoints");
+                        t = SetValue(t, "armor.hpLostWhileInDeepWater", "1000", "armor.maxHitPoints");
+                        t = SetValue(t, "armor.waterDamageDelay", "0", "armor.maxHitPoints");
+                        obj[s.Key] = t; n++;
+                    }
+                    log.Add(I18n.T("Wasser tötet (", "Water kills (") + n + I18n.T(" Soldaten)", " soldiers)"));
                 }
                 // ---- Materialtabelle: Fallschaden und Explosionsschaden an Soldaten
                 if (o.NoFallDamage || o.BlastSoldierPct < 100)
