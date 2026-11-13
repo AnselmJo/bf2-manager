@@ -1,4 +1,4 @@
-// Hauptfenster: Rotation – Rückgängig, Kontextmenü, Zeilentext - BF2 Manager. C# 5.
+﻿// Hauptfenster: Rotation – Rückgängig, Kontextmenü, Zeilentext - BF2 Manager. C# 5.
 using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
@@ -45,9 +45,20 @@ namespace BF2Coop
             ToolStripMenuItem up = new ToolStripMenuItem(T("Nach oben", "Move up")); up.Enabled = i > 0; up.Click += delegate { MoveRot(-1); };
             ToolStripMenuItem down = new ToolStripMenuItem(T("Nach unten", "Move down")); down.Enabled = i < _st.Maps.Count - 1; down.Click += delegate { MoveRot(1); };
             ToolStripMenuItem dup = new ToolStripMenuItem(T("Duplizieren", "Duplicate"));
-            dup.Click += delegate { MapEntry c = MapEntry.Make(m.Name, m.Mode, m.Size); c.Opt = m.Opt != null ? m.Opt.Clone() : null; _st.Maps.Insert(i + 1, c); RefreshRot(i + 1); MarkDirty(); };
+            dup.Click += delegate { MapEntry c = m.Clone(); _st.Maps.Insert(i + 1, c); RefreshRot(i + 1); MarkDirty(); };
             ToolStripMenuItem del = new ToolStripMenuItem(T("Entfernen (Entf)", "Remove (Del)")); del.Click += delegate { RemoveRot(); };
-            _rotMenu.Items.AddRange(new ToolStripItem[] { own, new ToolStripSeparator(), up, down, dup, new ToolStripSeparator(), del });
+            // Spaßregeln: Regel-Set direkt zuweisen
+            ToolStripMenuItem fun = new ToolStripMenuItem(T("⚡ Spaßregeln", "⚡ Fun rules"));
+            string cur = FunSets.SetNameOf(m);
+            ToolStripMenuItem none = new ToolStripMenuItem(T("Normal", "Normal")); none.Checked = cur == null; none.Click += delegate { AssignFunSet(m, null); };
+            fun.DropDownItems.Add(none);
+            foreach (string n in FunSets.Names())
+            {
+                string nn = n; ToolStripMenuItem it = new ToolStripMenuItem(n); it.Checked = string.Equals(cur, n, StringComparison.OrdinalIgnoreCase);
+                it.Click += delegate { AssignFunSet(m, nn); };
+                fun.DropDownItems.Add(it);
+            }
+            _rotMenu.Items.AddRange(new ToolStripItem[] { own, fun, new ToolStripSeparator(), up, down, dup, new ToolStripSeparator(), del });
         }
 
         // ---- Live: kommende Maps

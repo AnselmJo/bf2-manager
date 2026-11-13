@@ -332,5 +332,14 @@ namespace BF2Coop
             foreach (int[] m in modes) { string s = m[0] + "x" + m[1] + "@" + m[2] + "Hz"; if (!r.Contains(s)) r.Add(s); }
             return r;
         }
+
+        // Aktuelle Bildschirmauflösung im Video.con-Format (höchste passende Bildwiederholrate)
+        public static string Current()
+        {
+            Rectangle b = Screen.PrimaryScreen.Bounds;
+            string pre = b.Width + "x" + b.Height + "@";
+            foreach (string s in List()) if (s.StartsWith(pre)) return s;
+            return pre + "60Hz";
+        }
     }
 }

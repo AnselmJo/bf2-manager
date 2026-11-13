@@ -1,4 +1,4 @@
-// Hauptfenster: Updates (GitHub-Releases) - BF2 Manager. C# 5.
+﻿// Hauptfenster: Updates (GitHub-Releases) - BF2 Manager. C# 5.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -133,6 +133,10 @@ namespace BF2Coop
         void ShowUpdateNotes()
         {
             Updater.CleanupAfterStart();
+            // Alte Spaß-Aufsätze (30 Tage unbenutzt) im Hintergrund wegräumen – nie während Spiel oder Server laufen
+            string gd = GameDir;
+            if (!string.IsNullOrEmpty(gd) && !Srv.IsRunning() && !Srv.GameRunning())
+                ThreadPool.QueueUserWorkItem(delegate { try { FunPack.CleanupStale(gd, 30); } catch { } });
             if (Program.UpdatedFrom == null) return;
             string notes = "";
             try { if (File.Exists(Updater.NotesFile)) { notes = File.ReadAllText(Updater.NotesFile); File.Delete(Updater.NotesFile); } } catch { }

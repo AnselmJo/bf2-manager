@@ -123,7 +123,7 @@ namespace BF2Coop
 
         bool HasMapRules(List<MapEntry> maps)
         {
-            foreach (MapEntry m in maps) if (m.Fun != null && !FunOptions.FromDict(m.Fun).IsNeutral()) return true;
+            foreach (MapEntry m in maps) { Dictionary<string, string> r = FunSets.RulesOf(m); if (r != null && !FunOptions.FromDict(r).IsNeutral()) return true; }
             return false;
         }
 
@@ -131,8 +131,9 @@ namespace BF2Coop
 
         string PackFor(MapEntry m, string baseMod)
         {
-            if (m == null || m.Fun == null) return baseMod;
-            FunOptions o = FunOptions.FromDict(m.Fun);
+            Dictionary<string, string> r = FunSets.RulesOf(m);
+            if (r == null) return baseMod;
+            FunOptions o = FunOptions.FromDict(r);
             return o.IsNeutral() ? baseMod : FunPack.PackName(baseMod, o);
         }
 
@@ -142,7 +143,7 @@ namespace BF2Coop
             string name = PackFor(m, _mod);
             if (name == _mod) return name;
             List<string> maps = MapsOfPack(name, _mod, _st.Maps);
-            if (!PackReady(GameDir, name, maps)) FunPack.Build(GameDir, _mod, FunOptions.FromDict(m.Fun), name, maps);
+            if (!PackReady(GameDir, name, maps)) FunPack.Build(GameDir, _mod, FunOptions.FromDict(FunSets.RulesOf(m)), name, maps);
             return name;
         }
 
@@ -203,7 +204,7 @@ namespace BF2Coop
             foreach (MapEntry m in _st.Maps)
             {
                 string p = PackFor(m, baseMod); if (p == baseMod || !keep.Add(p)) continue;
-                todo.Add(new KeyValuePair<string, FunOptions>(p, FunOptions.FromDict(m.Fun)));
+                todo.Add(new KeyValuePair<string, FunOptions>(p, FunOptions.FromDict(FunSets.RulesOf(m))));
                 mapsOf[p] = MapsOfPack(p, baseMod, _st.Maps);
             }
             string running = _runMod;
@@ -272,7 +273,8 @@ namespace BF2Coop
             else
             {
                 MapEntry m = _st.Maps[idx];
-                string fun = m.Fun != null ? FunPack.Describe(FunOptions.FromDict(m.Fun)) : "";
+                Dictionary<string, string> mr = FunSets.RulesOf(m); string set = FunSets.SetNameOf(m);
+                string fun = mr != null ? (set != null ? set + ": " : "") + FunPack.Describe(FunOptions.FromDict(mr)) : "";
                 _nextModAnn = PackFor(m, _mod);
                 text = T("Nächste Runde: ", "Next round: ") + Util.Pretty(m.Name) + (fun.Length > 0 ? T(" – Spaßregeln: ", " – fun rules: ") + fun : T(" – normale Regeln", " – normal rules"))
                      + T(". Kurzer Server-Neustart, danach einfach wieder beitreten.", ". Short server restart, then just join again.");

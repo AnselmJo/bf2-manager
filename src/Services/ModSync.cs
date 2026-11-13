@@ -282,7 +282,7 @@ namespace BF2Coop
                 res.Bytes += total;
                 ModPrints.Invalidate(mod); ManifestStore.Invalidate(root);
             }
-            if (b != null) { res.Links = FunMods.Link(gameDir, h.Mod); ModPrints.Invalidate(h.Mod); ManifestStore.Invalidate(Path.Combine(Path.Combine(gameDir, "mods"), h.Mod)); }
+            if (b != null) { res.Links = FunMods.Link(gameDir, h.Mod); FunPack.Touch(gameDir, h.Mod); ModPrints.Invalidate(h.Mod); ManifestStore.Invalidate(Path.Combine(Path.Combine(gameDir, "mods"), h.Mod)); }
             return res;
         }
 

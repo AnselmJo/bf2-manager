@@ -45,7 +45,7 @@ namespace BF2Coop
             steps.Add(delegate { Shot("host_bots"); _botHost.ScrollTo(99999, false); });
             steps.Add(delegate { Shot("host_bots_scrolled"); SelectPage(PgServer); });
             steps.Add(delegate { Shot("host_options"); _advToggle.Checked = !_advToggle.Checked; });
-            steps.Add(delegate { Shot("host_options_adv"); _advToggle.Checked = !_advToggle.Checked; SelectPage(PgMaps); if (_st.Maps.Count > 0) { _lbRot.SelectedIndex = 0; ApplyFunPreset("c4"); _mapRight.ScrollTo(99999, false); } });
+            steps.Add(delegate { Shot("host_options_adv"); _advToggle.Checked = !_advToggle.Checked; SelectPage(PgMaps); if (_st.Maps.Count > 0) { _lbRot.SelectedIndex = 0; AssignFunSet(_st.Maps[0], FunSets.Names().Count > 0 ? FunSets.Names()[0] : null); _mapRight.EnsureVisible(_cFunMap); } });
             steps.Add(delegate { Shot("host_server_funrules"); _mapRight.ScrollTo(0, false); SelectPage(PgExtras); });
             steps.Add(delegate { Shot("host_settings"); Srv.FakeRunning = true; RefreshLive(); ShowServerView(); });
             steps.Add(delegate { Shot("host_live"); ShowResult("admin.listPlayers", "Id:255 - C. Bergqvist is remote  is an AI bot. | Id:254 - S. Parkinson is remote  is an AI bot. | Id:3 - Ansi  is remote"); });

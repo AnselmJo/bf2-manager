@@ -124,8 +124,31 @@ namespace BF2Coop
             {
                 string name = Path.GetFileName(d);
                 bool auto = Regex.IsMatch(name, "^fun_[0-9a-f]{6}$", RegexOptions.IgnoreCase) || Regex.IsMatch(name, "^" + Regex.Escape(baseMod) + "_fun_[0-9a-f]{6}$", RegexOptions.IgnoreCase);
-                if (!auto || keep.Contains(name) || !string.Equals(FunMods.BaseOf(gameDir, name), baseMod, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!auto || !string.Equals(FunMods.BaseOf(gameDir, name), baseMod, StringComparison.OrdinalIgnoreCase)) continue;
+                if (keep.Contains(name)) { Touch(gameDir, name); continue; }
                 try { Remove(gameDir, name); n++; } catch { }
+            }
+            return n;
+        }
+
+        // Aufsatz als „gerade benutzt“ markieren (Zeitstempel der fun.recipe) – Grundlage für CleanupStale
+        public static void Touch(string gameDir, string name)
+        {
+            try { File.SetLastWriteTimeUtc(Path.Combine(Path.Combine(Path.Combine(gameDir, "mods"), name), FunMods.RecipeFile), DateTime.UtcNow); } catch { }
+        }
+
+        // Auf jedem PC: Aufsätze, die länger als „days“ Tage nicht benutzt wurden, löschen. Sie bestehen fast nur aus Verknüpfungen
+        // und werden bei Bedarf sofort neu gebaut bzw. vom Host abgeglichen.
+        public static int CleanupStale(string gameDir, int days)
+        {
+            int n = 0; string mods = Path.Combine(gameDir, "mods");
+            if (!Directory.Exists(mods)) return 0;
+            DateTime limit = DateTime.UtcNow.AddDays(-days);
+            foreach (string d in Directory.GetDirectories(mods))
+            {
+                string f = Path.Combine(d, FunMods.RecipeFile);
+                if (!Regex.IsMatch(Path.GetFileName(d), "^fun_[0-9a-f]{6}$", RegexOptions.IgnoreCase) || !File.Exists(f)) continue;
+                try { if (File.GetLastWriteTimeUtc(f) < limit) { Remove(gameDir, Path.GetFileName(d)); n++; } } catch { }
             }
             return n;
         }

@@ -348,6 +348,12 @@ namespace BF2Coop.Tests
             string fp = ModPrints.Compute(game, "basemod_fun");
             Check(fp.Contains("+") && fp.EndsWith(Lan.Fingerprint(Lan.BuildManifest(bmod, null, null))), "fun pack fingerprint includes base mod");
             Check(ModPrints.Compute(game, "nomod") == "" && FunMods.BaseOf(game, "basemod") == null, "fingerprint of missing mod, plain mod has no base");
+            Check(GameLocator.AllMods(game).Contains("basemod") && !GameLocator.AllMods(game).Contains("basemod_fun"), "fun packs are not listed as mods");
+            string old = Path.Combine(game, "mods", "fun_a1b2c3"), fresh = Path.Combine(game, "mods", "fun_d4e5f6");
+            foreach (string d in new string[] { old, fresh }) { Directory.CreateDirectory(d); File.WriteAllText(Path.Combine(d, FunMods.RecipeFile), "Base=basemod\r\n"); }
+            File.SetLastWriteTimeUtc(Path.Combine(old, FunMods.RecipeFile), DateTime.UtcNow.AddDays(-40));
+            Check(FunPack.CleanupStale(game, 30) == 1 && !Directory.Exists(old) && Directory.Exists(fresh) && Directory.Exists(fmod), "stale fun packs removed, recent and others kept");
+            Directory.Delete(fresh, true);
             Check(ModSync.Transient(new System.Net.WebException("t", System.Net.WebExceptionStatus.Timeout)) && ModSync.Transient(new IOException("x"))
                 && !ModSync.Transient(new System.Net.WebException("p", System.Net.WebExceptionStatus.ProtocolError)) && !ModSync.Transient(new Exception("x")), "sync: only network hiccups are retried");
             // Gemeinsamer Manifest-Speicher: erste Abfrage startet die Prüfung im Hintergrund, danach kommt die Liste
@@ -453,6 +459,32 @@ namespace BF2Coop.Tests
             Check(nl2 >= 2 && linkedInfo && !File.Exists(Path.Combine(fl, "server.zip")), "links fill a real levels folder one level deeper");
             FunPack.Remove(game, "basemod_fun");
             Check(!Directory.Exists(Path.Combine(game, "mods", "basemod_fun")) && File.Exists(Path.Combine(lv, "map2", "server.zip")) && Directory.Exists(Path.Combine(lv, "map2", "info")), "removing a pack never touches the base mod");
+            // Regel-Sets: Maps verweisen nur auf den Namen – ändert man das Set, haben alle Maps die neue Fassung
+            FunSets.FileOverride = Path.Combine(_tmp, "funsets.json"); FunSets.Reload();
+            Check(FunSets.Names().Count >= 5 && File.Exists(FunSets.FileOverride), "rule sets: seeded on first use and saved");
+            FunOptions s1 = FunOptions.Neutral(); s1.WeaponRule = 3; s1.C4Force = 400;
+            FunSets.Set("Party", s1.ToDict());
+            List<MapEntry> rs = new List<MapEntry> { MapEntry.Make("a", "gpm_coop", 16), MapEntry.Make("b", "gpm_coop", 16), MapEntry.Make("c", "gpm_coop", 16) };
+            rs[0].Fun = FunSets.Ref("Party"); rs[1].Fun = FunSets.Ref("Party");
+            s1.C4Force = 900; FunSets.Set("Party", s1.ToDict());
+            Check(FunOptions.FromDict(FunSets.RulesOf(rs[0])).C4Force == 900 && FunOptions.FromDict(FunSets.RulesOf(rs[1])).C4Force == 900 && FunSets.RulesOf(rs[2]) == null, "rule sets: editing the set updates every map using it");
+            Check(FunPack.PackName("bf2all64", FunOptions.FromDict(FunSets.RulesOf(rs[0]))) == FunPack.PackName("bf2all64", FunOptions.FromDict(FunSets.RulesOf(rs[1]))), "rule sets: maps with the same set share one pack (no restart between them)");
+            FunSets.Reload();
+            Check(FunOptions.FromDict(FunSets.Get("Party")).C4Force == 900, "rule sets: persisted");
+            Check(FunSets.Rename("Party", "Mega Party") && FunSets.Get("Party") == null && FunSets.Get("Mega Party") != null && !FunSets.Rename("Mega Party", FunSets.Names()[0]), "rule sets: rename, no duplicates");
+            Check(FunSets.Clean("a;b=c|d") == "abcd" && FunSets.UniqueName("Mega Party") == "Mega Party 2", "rule sets: safe and unique names");
+            string rsf = Path.Combine(_tmp, "rules2", MapRules.FileName);
+            rs[0].Fun = FunSets.Ref("Mega Party"); MapRules.Save(rsf, rs);
+            List<MapEntry> rs2 = new List<MapEntry> { MapEntry.Make("a", "gpm_coop", 16), MapEntry.Make("b", "gpm_coop", 16), MapEntry.Make("c", "gpm_coop", 16) };
+            MapRules.Apply(rsf, rs2);
+            Check(FunSets.SetNameOf(rs2[0]) == "Mega Party", "rule sets: map keeps its set reference across save and load");
+            FunSets.Delete("Mega Party");
+            Check(FunSets.RulesOf(rs2[0]) == null, "rule sets: deleted set means normal rules");
+            List<MapEntry> old = new List<MapEntry> { MapEntry.Make("x", "gpm_coop", 16), MapEntry.Make("y", "gpm_coop", 16) };
+            FunOptions oc = FunOptions.Neutral(); oc.WeaponRule = 3; oc.C4Mags = 99; oc.C4Force = 400; oc.BlastSoldierPct = 2; oc.NoFallDamage = true;
+            old[0].Fun = oc.ToDict(); FunOptions od = FunOptions.Neutral(); od.HealthPct = 333; old[1].Fun = od.ToDict();
+            Check(FunSets.Migrate(old) && FunSets.SetNameOf(old[0]) == FunSets.Names()[0] && FunSets.SetNameOf(old[1]) != null && FunOptions.FromDict(FunSets.RulesOf(old[1])).HealthPct == 333, "rule sets: rules from 1.4.2 become sets (same rules = existing set)");
+            FunSets.FileOverride = null; FunSets.Reload();
             Dictionary<string, string> legacy = new Dictionary<string, string>(); legacy["C4ForMore"] = "0";
             FunOptions lo = FunOptions.FromDict(legacy);
             Check(!lo.C4Engineer && !lo.C4Sniper && !lo.C4AT, "fun: 1.4.1 recipe C4ForMore=0 maps to all three classes off");

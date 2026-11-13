@@ -120,7 +120,8 @@ namespace BF2Coop
             base.OnShown(e);
             RefreshStatus();
             if (_setupMode) ApplySetupMode(); else { AutoUpdateModules(); LoadAll(); WarnModule(); }
-            _host = _cfg.S("Role", _setupMode ? "play" : "host") == "host" && !_setupMode;
+            // Die meisten nutzen den Manager zum Mitspielen: immer in „Spielen“ starten – nur wenn der eigene Server schon läuft, in „Hosten“
+            _host = !_setupMode && Srv.IsRunning();
             _segRole.SetSilent(_host ? 1 : 0);
             LayoutNav(); LayoutHeader(); ApplyRoleCards();
             if (_host) ShowServerView(); else SelectPage(PgPlayer);

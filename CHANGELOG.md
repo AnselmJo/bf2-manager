@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.4.3]
+
+Rule sets for fun rules (shared by several maps), opens in Play, resolution selectable before the first game start, fun packs hidden from mod lists and cleaned up after 30 days.
+
 ## [1.4.2]
 
 Fun rules per map (incl. maps without vehicles), several mods in a row, one-click sync without timeouts, team switch.

@@ -27,15 +27,15 @@ using Timer = System.Windows.Forms.Timer;
 [assembly: AssemblyTitle("BF2 Manager")]
 [assembly: AssemblyProduct("BF2 Manager")]
 [assembly: AssemblyDescription("Launcher and server manager for Battlefield 2 LAN parties with bots")]
-[assembly: AssemblyVersion("1.4.2.0")]
-[assembly: AssemblyFileVersion("1.4.2.0")]
+[assembly: AssemblyVersion("1.4.3.0")]
+[assembly: AssemblyFileVersion("1.4.3.0")]
 
 namespace BF2Coop
 {
     public static class AppInfo
     {
         public const string Name = "BF2 Manager";
-        public const string Version = "1.4.2";
+        public const string Version = "1.4.3";
         public const int ModuleVersion = 7;
         public const string Repo = "AnselmJo/bf2-manager";
         public const string RepoUrl = "https://github.com/" + Repo;
@@ -177,18 +177,21 @@ namespace BF2Coop
             try
             {
                 foreach (string d in Directory.GetDirectories(Path.Combine(gameDir, "mods")))
-                    if (File.Exists(Path.Combine(d, "python", "game", "scoringCommon.py"))) r.Add(Path.GetFileName(d));
+                    if (File.Exists(Path.Combine(d, "python", "game", "scoringCommon.py")) && !IsFunPack(d)) r.Add(Path.GetFileName(d));
             }
             catch { }
             r.Sort(StringComparer.OrdinalIgnoreCase);
             return r;
         }
 
+        // Spaß-Aufsätze (fun.recipe) gehören zum Basis-Mod und tauchen in keiner Mod-Liste auf
+        static bool IsFunPack(string dir) { return File.Exists(Path.Combine(dir, "fun.recipe")); }
+
         // Alle Mod-Ordner (auch ohne Python), z. B. für Spieler-Seite und LAN-Abgleich
         public static List<string> AllMods(string gameDir)
         {
             List<string> r = new List<string>();
-            try { foreach (string d in Directory.GetDirectories(Path.Combine(gameDir, "mods"))) if (File.Exists(Path.Combine(d, "mod.desc")) || Directory.Exists(Path.Combine(d, "levels"))) r.Add(Path.GetFileName(d)); }
+            try { foreach (string d in Directory.GetDirectories(Path.Combine(gameDir, "mods"))) if ((File.Exists(Path.Combine(d, "mod.desc")) || Directory.Exists(Path.Combine(d, "levels"))) && !IsFunPack(d)) r.Add(Path.GetFileName(d)); }
             catch { }
             r.Sort(StringComparer.OrdinalIgnoreCase);
             return r;
@@ -377,6 +380,17 @@ namespace BF2Coop
                 foreach (string f in Directory.GetFiles(tpl, "*.con"))
                     if (!Path.GetFileName(f).Equals("Profile.con", StringComparison.OrdinalIgnoreCase)) File.Copy(f, Path.Combine(dir, Path.GetFileName(f)), true);
             WriteProfileCon(dir, name);
+            // Vor dem ersten Spielstart gibt es BF2s Vorlage noch nicht – dann eigene Grafikdatei, damit Auflösung & Co. sofort wählbar sind
+            string vc = Path.Combine(dir, "Video.con");
+            if (!File.Exists(vc))
+            {
+                StringBuilder sb = new StringBuilder();
+                foreach (string k in new string[] { "setTerrainQuality", "setGeometryQuality", "setLightingQuality", "setDynamicLightingQuality", "setDynamicShadowsQuality", "setEffectsQuality", "setTextureQuality", "setTextureFilteringQuality" })
+                    sb.Append("VideoSettings.").Append(k).Append(" 2\r\n");
+                sb.Append("VideoSettings.setResolution ").Append(DisplayModes.Current()).Append("\r\n");
+                sb.Append("VideoSettings.setAntialiasing Off\r\nVideoSettings.setViewDistanceScale 1\r\nVideoSettings.setVideoOptionScheme 3\r\n");
+                Util.WriteAtomic(vc, sb.ToString(), Util.Ansi);
+            }
         }
 
         static Bf2Profile Load(string id)

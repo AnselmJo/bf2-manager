@@ -194,7 +194,8 @@ namespace BF2Coop
             string res = Profiles.Get(vc, "VideoSettings", "setResolution") ?? "";
             List<string> modes = DisplayModes.List();
             if (res.Length > 0 && !modes.Contains(res)) modes.Insert(0, res);
-            _plRes.SetItems(modes, res);
+            // Noch keine Grafikdatei (BF2 nie gestartet): aktuelle Bildschirmauflösung vorschlagen – gespeichert wird bei Änderung
+            _plRes.SetItems(modes, res.Length > 0 ? res : DisplayModes.Current());
             int q = -1;
             for (int lvl = 0; lvl <= 2 && q < 0; lvl++)
             {
